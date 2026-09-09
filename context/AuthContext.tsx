@@ -17,16 +17,19 @@ import {
   loginWithCredentials,
   logoutUser,
   getCurrentUser,
+  getMisPermisos,
 } from "@/lib/auth";
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
+  permisos: string[];
   isLoading: boolean;
   login: (credentials: LoginCredentials, remember?: boolean) => Promise<LoginResponse>;
   logout: () => Promise<void>;
   setAuthData: (token: string, user: User, remember?: boolean) => void;
   updateUser: (updatedUser: User) => void;
+  refrescarPermisos: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -34,6 +37,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [permisos, setPermisos] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const router = useRouter();
 
@@ -44,15 +48,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedToken) {
         setToken(storedToken);
         try {
-          // TODO: [Laravel Backend Integration]
-          // Valida el token con GET /api/user para obtener los datos del usuario en sesión
-          const fetchedUser = await getCurrentUser(storedToken);
+          // Valida el token con GET /api/user y obtiene permisos con GET /api/mis-permisos
+          const [fetchedUser, fetchedPermisos] = await Promise.all([
+            getCurrentUser(storedToken),
+            getMisPermisos(storedToken),
+          ]);
           setUser(fetchedUser);
+          setPermisos(fetchedPermisos);
         } catch {
           // Si el token expiró o es inválido en Sanctum, eliminamos la cookie
           removeStoredToken();
           setToken(null);
           setUser(null);
+          setPermisos([]);
         }
       }
       setIsLoading(false);
@@ -74,6 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStoredToken(response.token, remember);
         setToken(response.token);
         setUser(response.user);
+
+        // Cargar permisos reales del usuario autenticado
+        const userPermisos = await getMisPermisos(response.token);
+        setPermisos(userPermisos);
+
         return response;
       } finally {
         setIsLoading(false);
@@ -83,6 +96,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   /**
+   * Refresca los permisos del usuario actual en memoria
+   */
+  const refrescarPermisos = useCallback(async () => {
+    const currentToken = token || getStoredToken();
+    if (currentToken) {
+      const updatedPermisos = await getMisPermisos(currentToken);
+      setPermisos(updatedPermisos);
+    }
+  }, [token]);
+
+  /**
    * Asignar manualmente credenciales recibidas (ej. tras inicializar el setup)
    */
   const setAuthData = useCallback(
@@ -90,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStoredToken(newToken, remember);
       setToken(newToken);
       setUser(newUser);
+      getMisPermisos(newToken).then((p) => setPermisos(p));
     },
     []
   );
@@ -109,13 +134,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentToken = token || getStoredToken();
 
     if (currentToken) {
-      // TODO: [Laravel Backend Integration] Llama a POST /api/logout
       await logoutUser(currentToken);
     }
 
     removeStoredToken();
     setToken(null);
     setUser(null);
+    setPermisos([]);
     setIsLoading(false);
     router.push("/login");
   }, [token, router]);
@@ -125,11 +150,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         token,
+        permisos,
         isLoading,
         login,
         logout,
         setAuthData,
         updateUser,
+        refrescarPermisos,
       }}
     >
       {children}

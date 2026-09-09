@@ -1,5 +1,5 @@
 /**
- * Sistema centralizado de permisos y control de acceso basado en roles (RBAC)
+ * Sistema centralizado de permisos y control de acceso basado en RBAC dinámico
  * para BottleTrack Frontend.
  */
 
@@ -18,118 +18,92 @@ export type ModuloSistema =
   | "configuracion"
   | "respaldos";
 
+/**
+ * Mapa estático conservado únicamente como REFERENCIA histórica.
+ * La fuente de verdad oficial ahora es la base de datos a través de GET /api/mis-permisos.
+ */
+/*
 export const PERMISOS_POR_ROL: Record<
   string,
   Record<ModuloSistema, NivelAcceso>
 > = {
-  Administrador: {
-    dashboard: "completo",
-    productos: "completo",
-    categorias: "completo",
-    proveedores: "completo",
-    compras: "completo",
-    ventas: "completo",
-    reportes: "completo",
-    usuarios: "completo",
-    roles: "completo",
-    configuracion: "completo",
-    respaldos: "completo",
-  },
-  admin: {
-    dashboard: "completo",
-    productos: "completo",
-    categorias: "completo",
-    proveedores: "completo",
-    compras: "completo",
-    ventas: "completo",
-    reportes: "completo",
-    usuarios: "completo",
-    roles: "completo",
-    configuracion: "completo",
-    respaldos: "completo",
-  },
-  "Gerente de Bodega": {
-    dashboard: "completo",
-    productos: "completo",
-    categorias: "completo",
-    proveedores: "completo",
-    compras: "completo",
-    ventas: "completo",
-    reportes: "completo",
-    usuarios: "completo",
-    roles: "completo",
-    configuracion: "completo",
-    respaldos: "completo",
-  },
-  "Encargado de Ventas": {
-    dashboard: "lectura",
-    productos: "lectura",
-    categorias: "ninguno",
-    proveedores: "ninguno",
-    compras: "ninguno",
-    ventas: "completo",
-    reportes: "ninguno",
-    usuarios: "ninguno",
-    roles: "ninguno",
-    configuracion: "ninguno",
-    respaldos: "ninguno",
-  },
-  Auditor: {
-    dashboard: "lectura",
-    productos: "lectura",
-    categorias: "lectura",
-    proveedores: "lectura",
-    compras: "lectura",
-    ventas: "lectura",
-    reportes: "completo",
-    usuarios: "ninguno",
-    roles: "ninguno",
-    configuracion: "ninguno",
-    respaldos: "ninguno",
-  },
+  Administrador: { ... },
+  "Gerente de Bodega": { ... },
+  "Encargado de Ventas": { ... },
+  Auditor: { ... },
 };
+*/
 
 /**
- * Determina si un rol tiene acceso (lectura o completo) a un módulo del sistema.
- * @param rol Nombre del rol tal como lo devuelve el backend Laravel
+ * Determina si el usuario tiene acceso (al menos un permiso del módulo) a un módulo del sistema.
+ * @param permisos Lista de claves de permisos del usuario autenticado (ej: ['productos.ver', 'ventas.crear'])
  * @param modulo Identificador del módulo a consultar
  */
 export function tieneAcceso(
-  rol: string | null | undefined,
+  permisos: string[] | null | undefined,
   modulo: ModuloSistema
 ): boolean {
-  if (!rol || !PERMISOS_POR_ROL[rol]) {
+  if (!permisos || !Array.isArray(permisos) || permisos.length === 0) {
     return false;
   }
-  const nivel = PERMISOS_POR_ROL[rol][modulo];
-  return nivel === "completo" || nivel === "lectura";
+  const prefix = `${modulo}.`;
+  return permisos.some((p) => p.startsWith(prefix));
 }
 
 /**
- * Determina si un rol tiene permisos de escritura/modificación ('completo') en un módulo.
- * @param rol Nombre del rol tal como lo devuelve el backend Laravel
+ * Determina si el usuario tiene permisos de edición/escritura en un módulo.
+ * @param permisos Lista de claves de permisos del usuario autenticado
  * @param modulo Identificador del módulo a consultar
  */
 export function puedeEditar(
-  rol: string | null | undefined,
+  permisos: string[] | null | undefined,
   modulo: ModuloSistema
 ): boolean {
-  if (!rol || !PERMISOS_POR_ROL[rol]) {
+  if (!permisos || !Array.isArray(permisos) || permisos.length === 0) {
     return false;
   }
-  const nivel = PERMISOS_POR_ROL[rol][modulo];
-  return nivel === "completo";
+
+  const clavesEscritura = [
+    `${modulo}.crear`,
+    `${modulo}.editar`,
+    `${modulo}.eliminar`,
+    `${modulo}.anular`,
+    `${modulo}.exportar`,
+    `${modulo}.generar`,
+    `${modulo}.restaurar`,
+  ];
+
+  return permisos.some((p) => clavesEscritura.includes(p));
 }
 
 /**
- * Retorna el nivel de acceso explícito ('completo' | 'lectura' | 'ninguno') de un rol.
+ * Determina si el usuario tiene una clave de permiso específica.
+ * @param permisos Lista de claves de permisos del usuario autenticado
+ * @param clave Clave exacta del permiso (ej: 'ventas.ver_todas', 'respaldos.generar')
+ */
+export function tienePermiso(
+  permisos: string[] | null | undefined,
+  clave: string
+): boolean {
+  if (!permisos || !Array.isArray(permisos) || permisos.length === 0) {
+    return false;
+  }
+  return permisos.includes(clave);
+}
+
+/**
+ * Retorna el nivel de acceso ('completo' | 'lectura' | 'ninguno') de un usuario en un módulo.
  */
 export function obtenerNivelAcceso(
-  rol: string | null | undefined,
+  permisos: string[] | null | undefined,
   modulo: ModuloSistema
 ): NivelAcceso {
-  if (!rol || !PERMISOS_POR_ROL[rol]) {
-    return "ninguno";
+  if (puedeEditar(permisos, modulo)) {
+    return "completo";
   }
-  return PERMISOS_POR_ROL[rol][modulo] || "ninguno";
+  if (tieneAcceso(permisos, modulo)) {
+    return "lectura";
+  }
+  return "ninguno";
 }
+

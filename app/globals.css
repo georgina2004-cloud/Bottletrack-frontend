@@ -7,6 +7,7 @@
 :root {
   /* Neutral defaults — overwritten at runtime by CompanyConfigContext once color_primario loads */
   --primary-brand: #171717;
+  --primary-brand-text: #ffffff;
   --primary-brand-hover: color-mix(in srgb, var(--primary-brand) 82%, black);
   --primary-brand-light: color-mix(in srgb, var(--primary-brand) 10%, transparent);
   --background: oklch(1 0 0);
@@ -18,7 +19,7 @@
 
   /* shadcn primary — mapeado a tu sistema de branding dinámico */
   --primary: var(--primary-brand);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary-foreground: var(--primary-brand-text, oklch(0.985 0 0));
 
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -44,7 +45,7 @@
 
   /* sidebar-primary también, para que el ítem activo del sidebar use el brand */
   --sidebar-primary: var(--primary-brand);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary-foreground: var(--primary-brand-text, oklch(0.985 0 0));
 
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
@@ -55,6 +56,7 @@
 
 @theme {
   --color-brand: var(--primary-brand);
+  --color-brand-text: var(--primary-brand-text);
   --color-brand-hover: var(--primary-brand-hover);
   --color-brand-light: var(--primary-brand-light);
   --color-brand-copper: var(--primary-brand);
@@ -73,7 +75,7 @@ body {
 /* Primary action button */
 .btn-brand {
   background-color: var(--primary-brand);
-  color: #ffffff;
+  color: var(--primary-brand-text, #ffffff);
   border: none;
 }
 .btn-brand:hover {

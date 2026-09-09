@@ -12,6 +12,8 @@ import { useAuth } from "./AuthContext";
 import { obtenerConfiguracionPublica, obtenerConfiguracionEmpresa } from "@/lib/api";
 import { ConfiguracionEmpresa } from "@/types/configuracion";
 
+import { obtenerColorTextoContraste } from "@/lib/colorPalette";
+
 interface CompanyConfigContextType {
   nombreLicoreria: string;
   logoUrl: string | null;
@@ -45,18 +47,21 @@ const DEFAULT_CONFIG: CompanyConfigContextType = {
 const CompanyConfigContext = createContext<CompanyConfigContextType>(DEFAULT_CONFIG);
 
 /**
- * Aplica las 3 variables CSS de marca sobre :root del documento en tiempo real,
- * sin necesidad de recargar la página. Los valores derivados (hover, light) se
- * calculan declarativamente con color-mix() en CSS, por lo que basta con fijar
- * --primary-brand y las otras dos se actualizan automáticamente al ser referencias.
+ * Aplica las variables CSS de marca sobre :root del documento en tiempo real,
+ * sin necesidad de recargar la página. Calcula el color de texto de alto contraste
+ * (blanco u oscuro) según la luminancia del color seleccionado.
  */
 function aplicarColorPrimarioDOM(color: string) {
   if (typeof document !== "undefined" && color) {
     const root = document.documentElement;
+    const textColor = obtenerColorTextoContraste(color);
+
     root.style.setProperty("--primary-brand", color);
+    root.style.setProperty("--primary-brand-text", textColor);
+    root.style.setProperty("--primary-foreground", textColor);
+    root.style.setProperty("--sidebar-primary-foreground", textColor);
+
     // hover y light son derivados via color-mix() en :root de globals.css;
-    // al actualizar --primary-brand los cálculos se propagan solos en CSS.
-    // Si se necesita forzar una recomputación explícita (ej. browsers sin color-mix):
     root.style.setProperty(
       "--primary-brand-hover",
       `color-mix(in srgb, ${color} 82%, black)`

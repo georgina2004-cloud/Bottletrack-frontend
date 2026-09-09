@@ -17,6 +17,22 @@ export interface CategoriaPayload {
   descripcion?: string | null;
 }
 
+export interface CategoriasPaginadasResponse {
+  data: Categoria[];
+  current_page: number;
+  last_page: number;
+  total: number;
+  per_page?: number;
+  from?: number;
+  to?: number;
+}
+
+export interface CategoriaFiltros {
+  busqueda?: string;
+  page?: number;
+  per_page?: number;
+}
+
 import { Presentacion } from "./presentacion";
 
 export interface Producto {

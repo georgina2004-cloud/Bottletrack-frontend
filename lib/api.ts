@@ -11,6 +11,8 @@ import {
   ProductoPayload,
   Categoria,
   CategoriaPayload,
+  CategoriasPaginadasResponse,
+  CategoriaFiltros,
   ApiValidationErrorResponse,
 } from "@/types/producto";
 import {
@@ -484,33 +486,63 @@ export async function desactivarProducto(
 }
 
 /**
- * Obtiene la lista completa de categorías disponibles para selectores y filtros.
- * Endpoint: GET /api/categorias
+ * Obtiene la lista paginada de categorías disponibles con soporte de búsqueda y paginación.
+ * Endpoint: GET /api/categorias?busqueda=...&page=...
  */
 export async function obtenerCategorias(
+  filtrosOrToken?: CategoriaFiltros | string | null,
   token?: string | null
-): Promise<Categoria[]> {
-  const response = await fetch(`${API_BASE_URL}/categorias`, {
+): Promise<CategoriasPaginadasResponse> {
+  let params: CategoriaFiltros = {};
+  let authToken: string | null | undefined = token;
+
+  if (typeof filtrosOrToken === "string") {
+    authToken = filtrosOrToken;
+  } else if (filtrosOrToken && typeof filtrosOrToken === "object") {
+    params = filtrosOrToken;
+  }
+
+  const queryParams = new URLSearchParams();
+  if (params.busqueda) queryParams.append("busqueda", params.busqueda);
+  if (params.page) queryParams.append("page", params.page.toString());
+  if (params.per_page) queryParams.append("per_page", params.per_page.toString());
+
+  const queryString = queryParams.toString();
+  const url = `${API_BASE_URL}/categorias${queryString ? `?${queryString}` : ""}`;
+
+  const response = await fetch(url, {
     method: "GET",
-    headers: getAuthHeaders(token),
+    headers: getAuthHeaders(authToken),
   });
 
   if (!response.ok) {
     console.error(
       `[obtenerCategorias] Error en respuesta del servidor: ${response.status}`
     );
-    return [];
+    return { data: [], current_page: 1, last_page: 1, total: 0 };
   }
 
-  // TODO: [Laravel Backend Integration] Verificar si la lista viene en { data: Categoria[] } o Categoria[]
-  const data = await response.json().catch(() => []);
-  if (Array.isArray(data)) {
-    return data;
-  }
+  const data = await response.json().catch(() => ({ data: [] }));
   if (data && Array.isArray(data.data)) {
-    return data.data;
+    return {
+      data: data.data,
+      current_page: data.current_page || 1,
+      last_page: data.last_page || 1,
+      total: data.total ?? data.data.length,
+      per_page: data.per_page,
+      from: data.from,
+      to: data.to,
+    };
   }
-  return [];
+  if (Array.isArray(data)) {
+    return {
+      data,
+      current_page: 1,
+      last_page: 1,
+      total: data.length,
+    };
+  }
+  return { data: [], current_page: 1, last_page: 1, total: 0 };
 }
 
 /**
@@ -2264,4 +2296,110 @@ export async function eliminarPresentacion(
     );
   }
 }
+
+// =============================================================================
+// MÓDULO DE COPIAS DE SEGURIDAD Y RESTAURACIÓN (RESPALDOS)
+// =============================================================================
+
+/**
+ * Genera y descarga un respaldo binario completo (.sql) de la base de datos MySQL.
+ * Endpoint: GET /api/backup/generar
+ */
+export async function descargarRespaldo(token?: string | null): Promise<void> {
+  const authToken = token || getStoredToken();
+  if (!authToken) {
+    throw new Error("No hay un token de autenticación disponible.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/backup/generar`, {
+    method: "GET",
+    headers: {
+      Accept: "application/octet-stream, application/json, */*",
+      Authorization: `Bearer ${authToken}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    if (response.status === 403) {
+      throw new Error("No tienes permisos suficientes para generar respaldos.");
+    }
+    const errData = await response.json().catch(() => null);
+    throw new Error(
+      errData?.message ||
+        `Error al generar la copia de seguridad (HTTP ${response.status})`
+    );
+  }
+
+  // Extraer nombre de archivo si viene en Content-Disposition
+  let filename = `bottletrack_backup_${new Date().toISOString().slice(0, 10)}.sql`;
+  const disposition = response.headers.get("Content-Disposition");
+  if (disposition && disposition.includes("filename=")) {
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    if (match && match[1]) {
+      filename = match[1].replace(/['"]/g, "").trim();
+    }
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.URL.revokeObjectURL(url);
+}
+
+/**
+ * Restaura la base de datos a partir de un archivo SQL subido.
+ * Endpoint: POST /api/backup/restaurar
+ */
+export async function restaurarRespaldo(
+  archivo: File,
+  token?: string | null
+): Promise<{ message: string }> {
+  const authToken = token || getStoredToken();
+  if (!authToken) {
+    throw new Error("No hay un token de autenticación disponible.");
+  }
+
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+
+  const response = await fetch(`${API_BASE_URL}/backup/restaurar`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    if (response.status === 403) {
+      throw new Error("No tienes permiso para restaurar respaldos de base de datos.");
+    }
+    if (response.status === 422 && data?.errors) {
+      const firstErr = Object.values(data.errors)[0] as string[] | undefined;
+      throw new ValidationError(
+        data?.message || firstErr?.[0] || "El archivo de respaldo no es válido.",
+        data.errors,
+        422
+      );
+    }
+    throw new Error(
+      data?.message ||
+        `Error al restaurar la base de datos (HTTP ${response.status})`
+    );
+  }
+
+  return {
+    message: data?.message || "Base de datos restaurada correctamente.",
+  };
+}
+
 

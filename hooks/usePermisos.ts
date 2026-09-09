@@ -8,46 +8,58 @@ import {
   tieneAcceso as tieneAccesoHelper,
   puedeEditar as puedeEditarHelper,
   obtenerNivelAcceso,
+  tienePermiso as tienePermisoHelper,
 } from "@/lib/permisos";
 
 /**
  * Hook para consultar permisos del usuario autenticado en sesión actual.
- * Provee funciones precargadas con el rol actual para simplificar la verificación en componentes.
+ * Provee funciones dinámicas conectadas al array de permisos reales del usuario.
  *
  * Ejemplo de uso:
- * const { tieneAcceso, puedeEditar } = usePermisos();
+ * const { tieneAcceso, puedeEditar, tienePermiso } = usePermisos();
  * if (tieneAcceso('productos')) { ... }
+ * if (tienePermiso('ventas.ver_todas')) { ... }
  */
 export function usePermisos() {
-  const { user, isLoading } = useAuth();
+  const { user, permisos, isLoading } = useAuth();
   const rol = user?.role;
 
   const tieneAcceso = useCallback(
     (modulo: ModuloSistema): boolean => {
-      return tieneAccesoHelper(rol, modulo);
+      return tieneAccesoHelper(permisos, modulo);
     },
-    [rol]
+    [permisos]
   );
 
   const puedeEditar = useCallback(
     (modulo: ModuloSistema): boolean => {
-      return puedeEditarHelper(rol, modulo);
+      return puedeEditarHelper(permisos, modulo);
     },
-    [rol]
+    [permisos]
+  );
+
+  const tienePermiso = useCallback(
+    (clave: string): boolean => {
+      return tienePermisoHelper(permisos, clave);
+    },
+    [permisos]
   );
 
   const nivelAcceso = useCallback(
     (modulo: ModuloSistema): NivelAcceso => {
-      return obtenerNivelAcceso(rol, modulo);
+      return obtenerNivelAcceso(permisos, modulo);
     },
-    [rol]
+    [permisos]
   );
 
   return {
     rol,
+    permisos,
     isLoadingAuth: isLoading,
     tieneAcceso,
     puedeEditar,
+    tienePermiso,
     nivelAcceso,
   };
 }
+

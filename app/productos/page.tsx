@@ -129,8 +129,8 @@ function ProductosContent() {
     async function loadCategorias() {
       try {
         setIsLoadingCategorias(true);
-        const data = await obtenerCategorias(token);
-        if (isMounted) setCategorias(data);
+        const res = await obtenerCategorias({ per_page: 100 }, token);
+        if (isMounted) setCategorias(res.data || []);
       } catch (error) {
         console.error("Error al cargar categorías:", error);
       } finally {
@@ -226,25 +226,12 @@ function ProductosContent() {
                 <span className="hidden sm:inline">Refrescar</span>
               </Button>
               {tienePermisoEscritura && (
-                <>
-                  <Link href="/productos/masivo">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs font-semibold gap-1.5 shadow-2xs hover:border-[var(--primary-brand)] hover:text-[var(--primary-brand)]"
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Carga Masiva</span>
-                      <span className="sm:hidden">Masivo</span>
-                    </Button>
-                  </Link>
-                  <Link href="/productos/nuevo">
-                    <Button size="sm" className="text-xs font-semibold gap-1.5 shadow-sm shadow-brand/20">
-                      <Plus className="w-4 h-4" />
-                      <span>Nuevo Producto</span>
-                    </Button>
-                  </Link>
-                </>
+                <Link href="/productos/nuevo">
+                  <Button size="sm" className="text-xs font-semibold gap-1.5 shadow-sm shadow-brand/20">
+                    <Plus className="w-4 h-4" />
+                    <span>Nuevo Producto</span>
+                  </Button>
+                </Link>
               )}
             </div>
           </div>

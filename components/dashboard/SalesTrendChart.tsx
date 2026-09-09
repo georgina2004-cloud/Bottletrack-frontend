@@ -380,3 +380,5 @@ export function SalesTrendChart({
   );
 }
 
+export default SalesTrendChart;
+

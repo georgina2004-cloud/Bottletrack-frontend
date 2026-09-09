@@ -209,9 +209,9 @@ export function ProductoForm({
     async function loadCategorias() {
       try {
         setIsLoadingCategorias(true);
-        const data = await obtenerCategorias(token);
+        const res = await obtenerCategorias({ per_page: 100 }, token);
         if (isMounted) {
-          setCategorias(data);
+          setCategorias(res.data || []);
         }
       } catch (err) {
         console.error("Error al cargar categorías:", err);

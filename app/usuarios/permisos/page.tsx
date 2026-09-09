@@ -65,35 +65,43 @@ const PERMISOS_DEFAULT: Permiso[] = [
   { id: 14, clave: "compras.crear", nombre: "Registrar Compras", descripcion: "Ingresar facturas y lotes al stock", modulo: "compras" },
   { id: 15, clave: "compras.anular", nombre: "Anular Compras", descripcion: "Revertir ingresos de mercadería erróneos", modulo: "compras" },
 
-  // Ventas (POS)
+  // Ventas (Barra de Venta)
   { id: 16, clave: "ventas.ver", nombre: "Ver Historial de Ventas", descripcion: "Consultar tickets y reportes de caja", modulo: "ventas" },
-  { id: 17, clave: "ventas.crear", nombre: "Operar Punto de Venta (POS)", descripcion: "Cobrar y emitir comprobantes de venta", modulo: "ventas" },
-  { id: 18, clave: "ventas.anular", nombre: "Anular Ventas", descripcion: "Revertir transacciones y reponer stock", modulo: "ventas" },
+  { id: 17, clave: "ventas.ver_todas", nombre: "Ver Todas las Ventas", descripcion: "Consultar historial y ventas de todos los vendedores", modulo: "ventas" },
+  { id: 18, clave: "ventas.crear", nombre: "Operar Barra de Venta", descripcion: "Cobrar y emitir comprobantes de venta", modulo: "ventas" },
+  { id: 19, clave: "ventas.anular", nombre: "Anular Ventas", descripcion: "Revertir transacciones y reponer stock", modulo: "ventas" },
 
   // Usuarios
-  { id: 19, clave: "usuarios.ver", nombre: "Ver Usuarios", descripcion: "Listar colaboradores del sistema", modulo: "usuarios" },
-  { id: 20, clave: "usuarios.crear", nombre: "Crear Usuarios", descripcion: "Registrar cuentas para cajeros y personal", modulo: "usuarios" },
-  { id: 21, clave: "usuarios.editar", nombre: "Editar Usuarios", descripcion: "Modificar roles y datos de acceso", modulo: "usuarios" },
-  { id: 22, clave: "usuarios.eliminar", nombre: "Eliminar / Desactivar", descripcion: "Revocar acceso a colaboradores", modulo: "usuarios" },
+  { id: 20, clave: "usuarios.ver", nombre: "Ver Usuarios", descripcion: "Listar colaboradores del sistema", modulo: "usuarios" },
+  { id: 21, clave: "usuarios.crear", nombre: "Crear Usuarios", descripcion: "Registrar cuentas para cajeros y personal", modulo: "usuarios" },
+  { id: 22, clave: "usuarios.editar", nombre: "Editar Usuarios", descripcion: "Modificar roles y datos de acceso", modulo: "usuarios" },
+  { id: 23, clave: "usuarios.eliminar", nombre: "Eliminar / Desactivar", descripcion: "Revocar acceso a colaboradores", modulo: "usuarios" },
 
   // Roles y Permisos
-  { id: 23, clave: "roles.ver", nombre: "Ver Roles y Matriz", descripcion: "Consultar configuración de permisos", modulo: "roles" },
-  { id: 24, clave: "roles.editar", nombre: "Modificar Matriz de Permisos", descripcion: "Asignar o revocar capacidades por rol", modulo: "roles" },
+  { id: 24, clave: "roles.ver", nombre: "Ver Roles y Matriz", descripcion: "Consultar configuración de permisos", modulo: "roles" },
+  { id: 25, clave: "roles.editar", nombre: "Modificar Matriz de Permisos", descripcion: "Asignar o revocar capacidades por rol", modulo: "roles" },
 
   // Reportes
-  { id: 25, clave: "reportes.ver", nombre: "Ver Reportes y Métricas", descripcion: "Visualizar gráficos y balances financieros", modulo: "reportes" },
-  { id: 26, clave: "reportes.exportar", nombre: "Exportar Reportes (PDF / Excel)", descripcion: "Descargar auditorías y listados", modulo: "reportes" },
+  { id: 26, clave: "reportes.ver", nombre: "Ver Reportes y Métricas", descripcion: "Visualizar gráficos y balances financieros", modulo: "reportes" },
+  { id: 27, clave: "reportes.exportar", nombre: "Exportar Reportes (PDF / Excel)", descripcion: "Descargar auditorías y listados", modulo: "reportes" },
 
   // Configuración
-  { id: 27, clave: "configuracion.ver", nombre: "Ver Configuración", descripcion: "Consultar datos de empresa e impuestos", modulo: "configuracion" },
-  { id: 28, clave: "configuracion.editar", nombre: "Modificar Configuración", descripcion: "Ajustar branding, datos fiscales y alertas", modulo: "configuracion" },
+  { id: 28, clave: "configuracion.ver", nombre: "Ver Configuración", descripcion: "Consultar datos de empresa e impuestos", modulo: "configuracion" },
+  { id: 29, clave: "configuracion.editar", nombre: "Modificar Configuración", descripcion: "Ajustar branding, datos fiscales y alertas", modulo: "configuracion" },
+
+  // Respaldos
+  { id: 30, clave: "respaldos.generar", nombre: "Generar Respaldo", descripcion: "Generar y descargar copias de seguridad de la base de datos", modulo: "respaldos" },
+  { id: 31, clave: "respaldos.restaurar", nombre: "Restaurar Respaldo", descripcion: "Restaurar la base de datos desde un archivo SQL", modulo: "respaldos" },
+
+  // Dashboard
+  { id: 32, clave: "dashboard.ver", nombre: "Ver Panel de Control", descripcion: "Visualizar el panel principal con métricas clave", modulo: "dashboard" },
 ];
 
 const MODULO_META: Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   productos: { label: "Productos e Inventario", icon: Boxes },
   categorias: { label: "Categorías", icon: Layers },
   proveedores: { label: "Proveedores", icon: Users },
-  ventas: { label: "Punto de Venta y Ventas", icon: Receipt },
+  ventas: { label: "Barra de Venta y Ventas", icon: Receipt },
   compras: { label: "Compras y Abastecimiento", icon: ShoppingCart },
   usuarios: { label: "Usuarios del Sistema", icon: UserCog },
   roles: { label: "Roles y Seguridad", icon: ShieldCheck },
@@ -132,11 +140,18 @@ export default function PermisosPage() {
       ]);
 
       let permisosList: Permiso[] = [];
+      const defaultMap = new Map(PERMISOS_DEFAULT.map((d) => [d.clave, d]));
+
       if (permisosRes.status === "fulfilled" && permisosRes.value.length > 0) {
-        permisosList = permisosRes.value.map((p) => ({
-          ...p,
-          modulo: p.modulo || p.clave.split(".")[0] || "general",
-        }));
+        permisosList = permisosRes.value.map((p) => {
+          const meta = defaultMap.get(p.clave);
+          return {
+            ...p,
+            nombre: meta?.nombre || p.nombre || p.clave,
+            descripcion: p.descripcion || meta?.descripcion || "",
+            modulo: p.modulo || meta?.modulo || p.clave.split(".")[0] || "general",
+          };
+        });
       } else {
         permisosList = PERMISOS_DEFAULT;
       }
@@ -158,7 +173,7 @@ export default function PermisosPage() {
           {
             id: 2,
             nombre: "Encargado de Ventas",
-            descripcion: "Operación de POS, ventas y catálogo",
+            descripcion: "Operación de Barra de Venta, ventas y catálogo",
             permisos: permisosList.filter((p) =>
               ["ventas.ver", "ventas.crear", "productos.ver", "reportes.ver"].includes(p.clave)
             ),
@@ -396,7 +411,7 @@ export default function PermisosPage() {
                 Usuarios
               </Link>
               <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-semibold text-brand">Matriz de Permisos</span>
+              <span className="font-semibold text-brand">Otorgar Permisos</span>
             </nav>
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-1">
@@ -415,7 +430,7 @@ export default function PermisosPage() {
                     </div>
                     <div>
                       <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#18181B] font-sans">
-                        Matriz de Roles y Permisos
+                        Otorgar Permisos por Rol
                       </h1>
                       <p className="text-xs text-slate-500">
                         Configuración granular de privilegios y control de acceso (RBAC) por rol.
@@ -524,7 +539,7 @@ export default function PermisosPage() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Buscar permiso (ej: productos.crear, anular venta)..."
+                placeholder="Buscar permiso (ej: Crear Productos, Anular Ventas)..."
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-slate-50/60 border border-slate-200 rounded-xl focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 transition-all text-slate-900"
@@ -675,9 +690,6 @@ export default function PermisosPage() {
                                     <span className="font-bold text-slate-800 text-xs sm:text-[13px] group-hover:text-brand transition-colors">
                                       {permiso.nombre || permiso.clave}
                                     </span>
-                                    <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded">
-                                      {permiso.clave}
-                                    </span>
                                   </div>
                                   {permiso.descripcion && (
                                     <p className="text-[11px] text-slate-500">
@@ -733,30 +745,6 @@ export default function PermisosPage() {
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
-
-          {/* ========================================================================= */}
-          {/* PIE DE PÁGINA INFORMATIVO                                                 */}
-          {/* ========================================================================= */}
-          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 text-xs text-slate-600 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-brand shrink-0" />
-              <span>
-                <strong>Seguridad RBAC:</strong> Los cambios aplicados se sincronizan en la tabla pivote <code>role_has_permissions</code> mediante transacciones atómicas.
-              </span>
-            </div>
-            {hasChanges && (
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleGuardar}
-                disabled={isSaving}
-                className="text-xs font-semibold gap-1.5 shadow-sm shadow-brand/20 w-full sm:w-auto"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Guardar Cambios</span>
-              </Button>
             )}
           </div>
         </div>

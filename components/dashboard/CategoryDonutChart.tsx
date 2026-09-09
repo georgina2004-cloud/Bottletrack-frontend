@@ -284,3 +284,5 @@ export function CategoryDonutChart({
 
 export const CategorySalesPieChart = CategoryDonutChart;
 export const CategoryPieChart = CategoryDonutChart;
+export default CategoryDonutChart;
+

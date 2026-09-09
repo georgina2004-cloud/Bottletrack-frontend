@@ -124,3 +124,32 @@ export async function getCurrentUser(token: string): Promise<User> {
   const data = await response.json();
   return data as User;
 }
+
+/**
+ * Obtiene el listado de claves de permisos asignadas al rol del usuario autenticado.
+ * Endpoint: GET /api/mis-permisos
+ */
+export async function getMisPermisos(token: string): Promise<string[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/mis-permisos`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      console.warn("[getMisPermisos] Error al obtener permisos:", response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error("[getMisPermisos] Error al consultar permisos del usuario:", error);
+    return [];
+  }
+}
+

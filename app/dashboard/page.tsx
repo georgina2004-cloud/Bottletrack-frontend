@@ -3,15 +3,37 @@
 import React, { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { ProtectedByRole } from "@/components/auth/ProtectedByRole";
 import { MetricCard } from "@/components/dashboard/MetricCard";
-import {
-  SalesTrendChart,
-  PeriodoTendencia,
-} from "@/components/dashboard/SalesTrendChart";
-import { TopProductsChart } from "@/components/dashboard/TopProductsChart";
-import { CategoryDonutChart } from "@/components/dashboard/CategoryDonutChart";
+import { ChartSkeleton } from "@/components/dashboard/ChartSkeleton";
+import type { PeriodoTendencia } from "@/components/dashboard/SalesTrendChart";
+
+const SalesTrendChart = dynamic(
+  () => import("@/components/dashboard/SalesTrendChart"),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton height="h-[360px]" />,
+  }
+);
+
+const CategoryDonutChart = dynamic(
+  () => import("@/components/dashboard/CategoryDonutChart"),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton height="h-[360px]" />,
+  }
+);
+
+const TopProductsChart = dynamic(
+  () => import("@/components/dashboard/TopProductsChart"),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton height="h-[320px]" />,
+  }
+);
+
 import { RecentSalesTable } from "@/components/dashboard/RecentSalesTable";
 import { RecentClientsCard } from "@/components/dashboard/RecentClientsCard";
 import { MonthlyPurchasesCard } from "@/components/dashboard/MonthlyPurchasesCard";
@@ -215,11 +237,6 @@ function DashboardContent() {
         : resumenInventario
         ? resumenInventario.productos_stock_bajo.toLocaleString("es-NI")
         : "—",
-      changeType: resumenInventario
-        ? resumenInventario.productos_stock_bajo > 0
-          ? "negative"
-          : "positive"
-        : "neutral",
       iconName: "alert-triangle",
       secondaryText: "Requieren reabastecimiento",
     },

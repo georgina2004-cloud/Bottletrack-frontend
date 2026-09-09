@@ -161,3 +161,6 @@ export function TopProductsChart({
     </div>
   );
 }
+
+export default TopProductsChart;
+

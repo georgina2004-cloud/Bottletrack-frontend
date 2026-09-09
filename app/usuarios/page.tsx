@@ -337,7 +337,7 @@ function UsuariosContent() {
                     className="gap-2 text-xs sm:text-sm font-semibold border-slate-200 hover:border-brand/40 hover:text-brand shadow-2xs w-full sm:w-auto cursor-pointer"
                   >
                     <Shield className="w-4 h-4 text-brand" />
-                    <span>Matriz de Permisos</span>
+                    <span>Otorgar Permisos</span>
                   </Button>
                 </Link>
               )}

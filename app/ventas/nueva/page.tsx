@@ -12,6 +12,7 @@ import {
   abrirFacturaPDF,
   obtenerPresentaciones,
 } from "@/lib/api";
+import { useCompanyConfig } from "@/context/CompanyConfigContext";
 import { useMoneda, formatPresentacionMl } from "@/lib/currency";
 import { obtenerCategoriasSugeridasPara } from "@/lib/sugerenciasCombo";
 import { Producto, Categoria } from "@/types/producto";
@@ -39,6 +40,10 @@ import {
   Printer,
   Layers,
   Sparkles,
+  Banknote,
+  CreditCard,
+  Coins,
+  Check,
 } from "lucide-react";
 
 interface ProductoConSugerencia {
@@ -78,9 +83,6 @@ export default function NuevaVentaPOSPage() {
   const [clienteNombre, setClienteNombre] = useState<string>("");
   const [descuentoInput, setDescuentoInput] = useState<string>("");
 
-  // =========================================================================
-  // ESTADOS DE PROCESAMIENTO Y CONFIRMACIÓN
-  // =========================================================================
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorCobro, setErrorCobro] = useState<string | null>(null);
   const [ventaExitosa, setVentaExitosa] = useState<{
@@ -91,6 +93,12 @@ export default function NuevaVentaPOSPage() {
   } | null>(null);
   const [isImprimiendoPdf, setIsImprimiendoPdf] = useState<boolean>(false);
   const [errorImpresionPdf, setErrorImpresionPdf] = useState<string | null>(null);
+
+  // Estados de Modal de Cobro y Método de Pago
+  const { moneda } = useCompanyConfig();
+  const [showModalCobro, setShowModalCobro] = useState<boolean>(false);
+  const [metodoPago, setMetodoPago] = useState<"efectivo" | "tarjeta">("efectivo");
+  const [montoRecibido, setMontoRecibido] = useState<string>("");
 
   // =========================================================================
   // CARGA Y BÚSQUEDA DE PRODUCTOS CON DEBOUNCE Y FILTRO DE CATEGORÍA
@@ -144,8 +152,8 @@ export default function NuevaVentaPOSPage() {
     async function loadCategorias() {
       if (!token) return;
       try {
-        const cats = await obtenerCategorias(token);
-        if (isMounted) setTodasCategorias(cats || []);
+        const res = await obtenerCategorias({ per_page: 100 }, token);
+        if (isMounted) setTodasCategorias(res.data || []);
       } catch (err) {
         console.error("Error al cargar categorías para sugerencias:", err);
       }
@@ -529,10 +537,29 @@ export default function NuevaVentaPOSPage() {
   const { formatMoneda: formatMoney } = useMoneda();
 
   // =========================================================================
-  // PROCESO DE COBRO (ENVÍO AL BACKEND CON presentacion_id)
+  // CÁLCULOS DE PAGO EN EFECTIVO Y CAMBIO
   // =========================================================================
-  const handleCobrar = async () => {
+  const montoRecibidoNum = parseFloat(montoRecibido) || 0;
+  const cambio = Math.max(0, montoRecibidoNum - total);
+  const faltante = Math.max(0, total - montoRecibidoNum);
+  const esMontoSuficiente =
+    montoRecibido.trim() !== "" && !isNaN(montoRecibidoNum) && montoRecibidoNum >= total;
+
+  // Abrir modal de cobro configurando el monto por defecto
+  const handleAbrirModalCobro = () => {
     if (carrito.length === 0) return;
+    setErrorCobro(null);
+    setMetodoPago("efectivo");
+    setMontoRecibido(total.toFixed(2));
+    setShowModalCobro(true);
+  };
+
+  // =========================================================================
+  // CONFIRMACIÓN DE VENTA (ENVÍO A POST /api/ventas)
+  // =========================================================================
+  const handleConfirmarVenta = async () => {
+    if (carrito.length === 0) return;
+    if (metodoPago === "efectivo" && !esMontoSuficiente) return;
 
     setIsSubmitting(true);
     setErrorCobro(null);
@@ -550,24 +577,26 @@ export default function NuevaVentaPOSPage() {
     try {
       const response = await crearVenta(payload, token);
 
-      // Éxito: guardar datos de confirmación y limpiar carrito
+      // Éxito: guardar datos de confirmación, cerrar modal de cobro y limpiar carrito
       setVentaExitosa({
         id: response.venta.id,
         numeroFactura: response.venta.numero_factura,
         total: response.venta.total,
         cliente: response.venta.cliente_nombre || "Consumidor Final",
       });
+      setShowModalCobro(false);
       setCarrito([]);
       setClienteNombre("");
       setDescuentoInput("");
+      setMontoRecibido("");
     } catch (err: unknown) {
       console.error("Error al procesar cobro de venta:", err);
-      // Mantener el carrito intacto para permitir ajustes y mostrar el mensaje específico
       setErrorCobro(
         err instanceof Error
           ? err.message
           : "Error inesperado al procesar la venta. Por favor, revisa las cantidades o el inventario disponible."
       );
+      setShowModalCobro(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -629,7 +658,7 @@ export default function NuevaVentaPOSPage() {
                   Ventas
                 </Link>
                 <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                <span className="font-semibold text-brand">Punto de Venta</span>
+                <span className="font-semibold text-brand">Barra de Venta</span>
               </nav>
 
               <div className="flex items-center gap-2.5">
@@ -638,7 +667,7 @@ export default function NuevaVentaPOSPage() {
                 </div>
                 <div>
                   <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#18181B] font-sans">
-                    Punto de Venta (POS)
+                    Barra de Venta
                   </h1>
                   <p className="text-xs text-slate-500">
                     Facturación ágil con presentaciones de venta múltiples y existencias en tiempo real.
@@ -731,7 +760,7 @@ export default function NuevaVentaPOSPage() {
                       onClick={() => setCategoriaSeleccionada("")}
                       className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                         categoriaSeleccionada === ""
-                          ? "bg-[var(--primary-brand)] text-white shadow-2xs"
+                          ? "bg-[var(--primary-brand)] text-[var(--primary-brand-text,#ffffff)] shadow-2xs"
                           : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
                       }`}
                     >
@@ -748,7 +777,7 @@ export default function NuevaVentaPOSPage() {
                           }
                           className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                             isSelected
-                              ? "bg-[var(--primary-brand)] text-white shadow-2xs"
+                              ? "bg-[var(--primary-brand)] text-[var(--primary-brand-text,#ffffff)] shadow-2xs"
                               : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
                           }`}
                         >
@@ -882,7 +911,7 @@ export default function NuevaVentaPOSPage() {
                   <div className="flex items-center gap-2">
                     <Boxes className="w-4 h-4 text-brand" />
                     <h2 className="text-sm font-bold text-slate-900">
-                      Catálogo Disponible
+                      Productos Disponibles para Venta
                     </h2>
                     <span className="text-xs text-slate-400">
                       ({productos.length} encontrados)
@@ -974,8 +1003,11 @@ export default function NuevaVentaPOSPage() {
                                 {/* Badge de unidades en carrito */}
                                 {unidadesEnCarrito > 0 && (
                                   <span
-                                    className="absolute top-2.5 right-2.5 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-bold text-white shadow-md animate-in zoom-in-75 duration-150"
-                                    style={{ backgroundColor: "var(--primary-brand)" }}
+                                    className="absolute top-2.5 right-2.5 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-bold shadow-md animate-in zoom-in-75 duration-150"
+                                    style={{
+                                      backgroundColor: "var(--primary-brand)",
+                                      color: "var(--primary-brand-text, #ffffff)",
+                                    }}
                                     title={`${unidadesEnCarrito} unidades base en la orden`}
                                   >
                                     {unidadesEnCarrito}
@@ -1043,8 +1075,11 @@ export default function NuevaVentaPOSPage() {
                               <button
                                 type="button"
                                 disabled={!tieneStock || stockAlcanzado || isLoadingThis}
-                                className="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0 shadow-sm transition-transform duration-150 group-hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                                style={{ backgroundColor: "var(--primary-brand)" }}
+                                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform duration-150 group-hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                style={{
+                                  backgroundColor: "var(--primary-brand)",
+                                  color: "var(--primary-brand-text, #ffffff)",
+                                }}
                                 title={
                                   !tieneStock
                                     ? "Producto agotado"
@@ -1322,21 +1357,12 @@ export default function NuevaVentaPOSPage() {
                   <Button
                     type="button"
                     size="lg"
-                    onClick={handleCobrar}
+                    onClick={handleAbrirModalCobro}
                     disabled={carrito.length === 0 || isSubmitting}
                     className="w-full text-sm font-bold gap-2 py-3 shadow-md shadow-brand/25 transition-all cursor-pointer"
                   >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Procesando Venta...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingCart className="w-4 h-4" />
-                        <span>Cobrar {formatMoney(total)}</span>
-                      </>
-                    )}
+                    <ShoppingCart className="w-4 h-4" />
+                    <span>Cobrar {formatMoney(total)}</span>
                   </Button>
                 </div>
               </div>
@@ -1487,6 +1513,287 @@ export default function NuevaVentaPOSPage() {
                     className="text-xs"
                   >
                     Cancelar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* MODAL DE SELECCIÓN DE MÉTODO DE PAGO Y CÁLCULO DE CAMBIO                  */}
+          {/* ========================================================================= */}
+          {showModalCobro && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
+                {/* Header del Modal */}
+                <div className="p-5 border-b border-slate-100 flex items-start justify-between gap-3 bg-slate-50/50">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs"
+                      style={{
+                        backgroundColor: "color-mix(in srgb, var(--primary-brand) 12%, transparent)",
+                        color: "var(--primary-brand)",
+                      }}
+                    >
+                      <Receipt className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-sans text-base sm:text-lg font-bold text-slate-900 leading-snug">
+                        Cobro de Venta
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {clienteNombre.trim()
+                          ? `Cliente: ${clienteNombre.trim()}`
+                          : "Consumidor Final"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowModalCobro(false)}
+                    disabled={isSubmitting}
+                    className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-4">
+                  {/* Banner con Total a Cobrar */}
+                  <div className="bg-slate-900 rounded-2xl p-4 text-white flex items-center justify-between shadow-xs">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Total a Cobrar
+                      </span>
+                      <span className="text-xs text-slate-300">
+                        {carrito.length} producto{carrito.length === 1 ? "" : "s"} en la orden
+                      </span>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-extrabold font-sans text-right tracking-tight">
+                      {formatMoney(total)}
+                    </div>
+                  </div>
+
+                  {/* Selector de Método de Pago */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      Método de Pago
+                    </label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {/* Opción Efectivo */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMetodoPago("efectivo");
+                          if (!montoRecibido) setMontoRecibido(total.toFixed(2));
+                        }}
+                        className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          metodoPago === "efectivo"
+                            ? "border-[var(--primary-brand)] bg-[var(--primary-brand)]/5 ring-2 ring-[var(--primary-brand)]/20 text-slate-900 shadow-xs"
+                            : "border-slate-200 hover:border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                            metodoPago === "efectivo"
+                              ? "bg-[var(--primary-brand)] text-white shadow-2xs"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                          style={
+                            metodoPago === "efectivo"
+                              ? {
+                                  backgroundColor: "var(--primary-brand)",
+                                  color: "var(--primary-brand-text, #ffffff)",
+                                }
+                              : undefined
+                          }
+                        >
+                          <Coins className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold">Efectivo</span>
+                      </button>
+
+                      {/* Opción Tarjeta */}
+                      <button
+                        type="button"
+                        onClick={() => setMetodoPago("tarjeta")}
+                        className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          metodoPago === "tarjeta"
+                            ? "border-[var(--primary-brand)] bg-[var(--primary-brand)]/5 ring-2 ring-[var(--primary-brand)]/20 text-slate-900 shadow-xs"
+                            : "border-slate-200 hover:border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                            metodoPago === "tarjeta"
+                              ? "bg-[var(--primary-brand)] text-white shadow-2xs"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                          style={
+                            metodoPago === "tarjeta"
+                              ? {
+                                  backgroundColor: "var(--primary-brand)",
+                                  color: "var(--primary-brand-text, #ffffff)",
+                                }
+                              : undefined
+                          }
+                        >
+                          <CreditCard className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold">Tarjeta</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Panel según Método Seleccionado */}
+                  {metodoPago === "efectivo" ? (
+                    <div className="space-y-3 pt-1">
+                      {/* Input Monto Recibido */}
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">
+                          Monto Recibido del Cliente
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 select-none">
+                            {moneda || "C$"}
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            value={montoRecibido}
+                            onChange={(e) => setMontoRecibido(e.target.value)}
+                            disabled={isSubmitting}
+                            autoFocus
+                            className="w-full pl-12 pr-4 py-2.5 text-base sm:text-lg font-bold font-mono bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[var(--primary-brand)] focus:ring-3 focus:ring-[var(--primary-brand)]/15 transition-all"
+                          />
+                        </div>
+
+                        {/* Botones de atajo rápido */}
+                        <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setMontoRecibido(total.toFixed(2))}
+                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors shrink-0 cursor-pointer shadow-2xs"
+                          >
+                            Monto Exacto
+                          </button>
+                          {[100, 200, 500, 1000].map((billete) => {
+                            if (billete >= total) {
+                              return (
+                                <button
+                                  key={billete}
+                                  type="button"
+                                  onClick={() => setMontoRecibido(billete.toFixed(2))}
+                                  className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors shrink-0 cursor-pointer"
+                                >
+                                  {moneda || "C$"} {billete}
+                                </button>
+                              );
+                            }
+                            return null;
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Caja de Cálculo de Cambio en Tiempo Real */}
+                      {esMontoSuficiente ? (
+                        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/90 flex items-center justify-between animate-in fade-in duration-150 shadow-2xs">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                              <Check className="w-4 h-4 stroke-[3]" />
+                            </div>
+                            <div>
+                              <span className="text-[11px] font-bold text-emerald-900 block">
+                                Cambio a Entregar
+                              </span>
+                              <span className="text-[10px] text-emerald-700">
+                                {cambio === 0
+                                  ? "Pago exacto (sin vuelto)"
+                                  : "Devolver al cliente"}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-xl sm:text-2xl font-extrabold font-sans text-emerald-700 tracking-tight">
+                            {formatMoney(cambio)}
+                          </div>
+                        </div>
+                      ) : montoRecibido.trim() !== "" ? (
+                        <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between text-xs text-rose-800 animate-in fade-in duration-150">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                            <span className="font-bold">Monto insuficiente</span>
+                          </div>
+                          <span className="font-mono font-bold text-rose-700">
+                            Faltan {formatMoney(faltante)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs text-slate-500 text-center">
+                          Ingresa el monto recibido para calcular el cambio.
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Panel de Pago con Tarjeta */
+                    <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200/80 text-blue-950 space-y-2 animate-in fade-in duration-150">
+                      <div className="flex items-center gap-2.5">
+                        <CreditCard className="w-5 h-5 text-blue-600 shrink-0" />
+                        <div>
+                          <p className="font-bold text-xs sm:text-sm text-blue-900">
+                            Terminal de Tarjeta
+                          </p>
+                          <p className="text-[11px] text-blue-800/90 mt-0.5">
+                            Procesa la transacción en el terminal bancario físico por{" "}
+                            <strong>{formatMoney(total)}</strong>.
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-blue-700 pt-1 border-t border-blue-200/60">
+                        * No aplica cálculo de cambio en efectivo.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer del Modal */}
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowModalCobro(false)}
+                    disabled={isSubmitting}
+                    className="text-xs"
+                  >
+                    Cancelar
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleConfirmarVenta}
+                    isLoading={isSubmitting}
+                    disabled={
+                      isSubmitting ||
+                      (metodoPago === "efectivo" && !esMontoSuficiente)
+                    }
+                    className="text-xs font-bold gap-1.5 shadow-sm"
+                  >
+                    {isSubmitting ? (
+                      <span>Procesando...</span>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Confirmar Venta</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>

@@ -19,6 +19,7 @@ import {
   Settings,
   ShieldCheck,
   User,
+  Database,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -111,6 +112,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       ],
     },
     { name: "Configuración", href: "/configuracion", icon: Settings, modulo: "configuracion" },
+    { name: "Respaldos", href: "/respaldos", icon: Database, modulo: "respaldos" },
     { name: "Mi Perfil", href: "/perfil", icon: User, modulo: "dashboard" },
   ];
 

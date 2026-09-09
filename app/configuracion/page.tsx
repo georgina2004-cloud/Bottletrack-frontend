@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { HexColorPicker } from "react-colorful";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { ProtectedByRole } from "@/components/auth/ProtectedByRole";
@@ -31,6 +32,8 @@ import {
   RefreshCw,
   CheckCircle2,
   Trash2,
+  Database,
+  ChevronRight,
 } from "lucide-react";
 
 function getFullImageUrl(url: string | null | undefined): string | null {
@@ -894,6 +897,54 @@ export default function ConfiguracionPage() {
                       <span>Activo</span>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* ========================================================================= */}
+              {/* SECCIÓN 4: BASE DE DATOS Y RESPALDOS                                      */}
+              {/* ========================================================================= */}
+              <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-8 space-y-6">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-brand/10 text-brand rounded-xl">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <h2 className="text-base font-bold text-slate-900">
+                      Base de Datos & Copias de Seguridad
+                    </h2>
+                  </div>
+                  <Link href="/respaldos">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs font-semibold text-brand border-brand/30 hover:bg-brand/10 cursor-pointer"
+                    >
+                      <span>Gestionar Respaldos</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </Link>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50/70 border border-slate-100 rounded-2xl">
+                  <div className="space-y-0.5">
+                    <p className="text-xs sm:text-sm font-bold text-slate-800">
+                      Generación de Respaldos MySQL (.sql) y Restauración
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Descarga copias de seguridad de todas las tablas o restaura el estado del sistema desde una copia local.
+                    </p>
+                  </div>
+                  <Link href="/respaldos" className="w-full sm:w-auto shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full sm:w-auto text-xs font-semibold gap-1.5 cursor-pointer shadow-xs shadow-brand/20"
+                    >
+                      <Database className="w-3.5 h-3.5" />
+                      <span>Ir a Respaldos</span>
+                    </Button>
+                  </Link>
                 </div>
               </div>
 

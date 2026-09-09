@@ -101,40 +101,21 @@ export function MetricCard({ metric, isLoading = false }: MetricCardProps) {
         </div>
       </div>
 
-      {/* Footer: Trend badge and period / secondary text */}
-      <div className="flex items-center flex-wrap gap-1.5 pt-2 border-t border-slate-100/80 text-xs">
-        {isLoading ? (
-          <div className="h-4 w-28 bg-slate-100 animate-pulse rounded my-0.5" />
-        ) : (
-          <>
-            {metric.change !== undefined && (
-              <span
-                className={`
-                  inline-flex items-center gap-0.5 font-semibold px-1.5 py-0.5 rounded-md text-[10px]
-                  ${
-                    metric.changeType === "positive"
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-                      : metric.changeType === "negative"
-                      ? "bg-rose-50 text-rose-700 border border-rose-200/60"
-                      : "bg-slate-100 text-slate-600 border border-slate-200"
-                  }
-                `}
-              >
-                {metric.changeType === "positive" ? (
-                  <ArrowUpRight className="w-3 h-3" />
-                ) : metric.changeType === "negative" ? (
-                  <ArrowDownRight className="w-3 h-3" />
-                ) : null}
-                {metric.change > 0 ? `+${metric.change}%` : `${metric.change}%`}
-              </span>
-            )}
-
-            <span className="text-slate-500 text-[11px] truncate" title={metric.period || metric.secondaryText}>
-              {metric.period || metric.secondaryText}
+      {/* Footer: Descriptive secondary text */}
+      {(metric.secondaryText || metric.period) && (
+        <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100/80 text-xs">
+          {isLoading ? (
+            <div className="h-4 w-28 bg-slate-100 animate-pulse rounded my-0.5" />
+          ) : (
+            <span
+              className="text-slate-500 text-[11px] truncate font-medium"
+              title={metric.secondaryText || metric.period}
+            >
+              {metric.secondaryText || metric.period}
             </span>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

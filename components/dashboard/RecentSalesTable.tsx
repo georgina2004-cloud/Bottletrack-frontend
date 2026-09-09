@@ -47,7 +47,7 @@ export function RecentSalesTable({
             </h3>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Transacciones recientes en punto de venta y facturación
+            Transacciones recientes en barra de venta y facturación
           </p>
         </div>
 

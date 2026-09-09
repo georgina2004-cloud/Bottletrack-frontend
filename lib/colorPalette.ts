@@ -55,6 +55,45 @@ export function hexToHsl(hexInput: string): { h: number; s: number; l: number } 
 }
 
 /**
+ * Calcula la luminancia relativa (0 a 1) según el estándar WCAG 2.1.
+ * Referencia: https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+ */
+export function calcularLuminancia(hexInput: string): number {
+  let hex = hexInput.trim().replace(/^#/, "");
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  if (hex.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return 0.1; // Default oscuro
+  }
+
+  const sRGBtoLin = (val: number) => {
+    const c = val / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+
+  const r = sRGBtoLin(parseInt(hex.substring(0, 2), 16));
+  const g = sRGBtoLin(parseInt(hex.substring(2, 4), 16));
+  const b = sRGBtoLin(parseInt(hex.substring(4, 6), 16));
+
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Determina el color de texto óptimo (#ffffff o #171717) para garantizar máxima legibilidad y contraste
+ * sobre un color de fondo dinámico según la luminancia relativa WCAG.
+ * - Fondos claros (luminancia > 0.45, ej: amarillo, cian claro, verde lima): devuelve "#171717" (oscuro).
+ * - Fondos oscuros/medios (luminancia <= 0.45, ej: cobre, azul marino, vino, negro): devuelve "#ffffff" (blanco).
+ */
+export function obtenerColorTextoContraste(hexInput: string): string {
+  const luminancia = calcularLuminancia(hexInput);
+  return luminancia > 0.45 ? "#171717" : "#ffffff";
+}
+
+/**
  * Convierte valores HSL { h (0-360), s (0-1), l (0-1) } a formato HEX (#rrggbb).
  */
 export function hslToHex(h: number, s: number, l: number): string {
