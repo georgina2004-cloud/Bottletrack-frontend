@@ -17,6 +17,8 @@ import {
   DollarSign,
 } from "lucide-react";
 
+import { formatDateLegible } from "@/lib/formatDate";
+
 export default function MaestroDetalleVentasPage() {
   const { token } = useAuth();
   const { formatMoneda: formatMonto } = useMoneda();
@@ -61,6 +63,11 @@ export default function MaestroDetalleVentasPage() {
       [facturaKey]: !prev[facturaKey],
     }));
   };
+
+  const totalFacturadoMaestro = maestroVentas.reduce(
+    (acc, v) => acc + (Number(v.total_venta || v.total) || 0),
+    0
+  );
 
   return (
     <div className="space-y-6">
@@ -132,7 +139,9 @@ export default function MaestroDetalleVentasPage() {
                         <td className="py-3 px-4 font-mono font-bold text-slate-900">
                           #{keyFactura}
                         </td>
-                        <td className="py-3 px-4 text-slate-600 whitespace-nowrap">{v.fecha}</td>
+                        <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                          {formatDateLegible(v.fecha)}
+                        </td>
                         <td className="py-3 px-4 font-medium text-slate-800">
                           {v.cliente || "Consumidor Final"}
                         </td>
@@ -194,6 +203,16 @@ export default function MaestroDetalleVentasPage() {
                   );
                 })}
               </tbody>
+              <tfoot className="bg-slate-50/90 font-bold border-t-2 border-slate-200 text-slate-900">
+                <tr>
+                  <td colSpan={5} className="py-3.5 px-4 uppercase tracking-wider text-[11px] text-slate-800">
+                    Total Facturado ({maestroVentas.length} transacciones)
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-bold font-sans text-slate-950 text-base">
+                    {formatMonto(totalFacturadoMaestro)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

@@ -390,13 +390,13 @@ function ProductosContent() {
                                 onClick={() => setProductoSeleccionado(isSelected ? null : prod)}
                                 className="flex items-center gap-3 text-left group/name cursor-pointer"
                               >
-                                <div className="w-10 h-10 rounded-lg bg-stone-50 border border-slate-200/80 shrink-0 overflow-hidden flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-lg bg-gray-50 border border-slate-200/80 shrink-0 overflow-hidden flex items-center justify-center p-0.5">
                                   {prod.imagen_url ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
                                       src={prod.imagen_url}
                                       alt={prod.nombre}
-                                      className="w-full h-full object-cover"
+                                      className="w-full h-full object-contain"
                                     />
                                   ) : (
                                     <Wine className="w-5 h-5 text-slate-300 stroke-[1.5]" />
@@ -632,7 +632,7 @@ function ProductosContent() {
               <div className="p-5 space-y-6">
                 {/* 1. BLOQUE SUPERIOR: Imagen grande + Info Clave */}
                 <div className="space-y-4">
-                  <div className="aspect-square max-h-56 w-full rounded-2xl bg-stone-50 border border-slate-200/80 flex items-center justify-center overflow-hidden shadow-2xs">
+                  <div className="aspect-square max-h-56 w-full rounded-2xl bg-gray-50 border border-slate-200/80 flex items-center justify-center overflow-hidden shadow-2xs">
                     {prod.imagen_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img

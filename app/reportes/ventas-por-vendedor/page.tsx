@@ -46,6 +46,10 @@ export default function VentasPorVendedorPage() {
     cargarDatos();
   }, [cargarDatos]);
 
+  const totalTransacciones = datos.reduce(
+    (acc, curr) => acc + (Number(curr.total_ventas) || 0),
+    0
+  );
   const totalVendido = datos.reduce(
     (acc, curr) => acc + (Number(curr.monto_total) || 0),
     0
@@ -59,7 +63,6 @@ export default function VentasPorVendedorPage() {
         tipo="ventas-por-vendedor"
         desde={desde}
         hasta={hasta}
-        badge={`Total: ${formatMonto(totalVendido)}`}
       />
 
       <FiltrosFecha
@@ -112,6 +115,19 @@ export default function VentasPorVendedorPage() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-slate-50/90 font-bold border-t-2 border-slate-200 text-slate-900">
+                <tr>
+                  <td className="py-3.5 px-4 uppercase tracking-wider text-[11px] text-slate-800">
+                    Total General ({datos.length} vendedores)
+                  </td>
+                  <td className="py-3.5 px-4 text-center font-bold text-slate-800">
+                    {totalTransacciones} transacciones
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-bold font-sans text-slate-950 text-base">
+                    {formatMonto(totalVendido)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

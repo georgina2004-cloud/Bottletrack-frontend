@@ -68,8 +68,10 @@ export interface ReporteInventarioActual {
   categoria_nombre?: string | null;
   precio_compra: number | string;
   precio_venta: number | string;
-  stock_actual: number;
-  stock_minimo: number;
+  stock_actual?: number;
+  stock?: number;
+  stock_minimo?: number;
+  stock_min?: number;
   ubicacion?: string | null;
   presentacion_ml?: string | null;
   activo?: boolean;
@@ -81,8 +83,10 @@ export interface ReporteInventarioActual {
 export interface ReporteStockBajo {
   id: number;
   nombre: string;
-  stock_actual: number;
-  stock_minimo: number;
+  stock_actual?: number;
+  stock?: number;
+  stock_minimo?: number;
+  stock_min?: number;
   deficit?: number;
   categoria?: string | { nombre: string } | null;
   categoria_nombre?: string | null;

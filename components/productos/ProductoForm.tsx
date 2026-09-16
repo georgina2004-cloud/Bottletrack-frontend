@@ -32,6 +32,7 @@ import {
   Trash2,
   Boxes,
   Droplets,
+  Upload,
 } from "lucide-react";
 import { PresentacionesManager } from "@/components/productos/PresentacionesManager";
 
@@ -140,6 +141,8 @@ export function ProductoForm({
   const [imagenPreview, setImagenPreview] = useState<string | null>(null);
   /** Si el usuario quiere quitar la imagen actual del servidor */
   const [quitarImagenExistente, setQuitarImagenExistente] = useState<boolean>(false);
+  /** Estado de arrastre sobre la zona Drag & Drop */
+  const [isDragging, setIsDragging] = useState<boolean>(false);
   const imagenInputRef = useRef<HTMLInputElement>(null);
   // ───────────────────────────────────────────────────────────────────────────
 
@@ -275,15 +278,16 @@ export function ProductoForm({
     return null;
   }, [watchedPrecioCompra, watchedPrecioVenta]);
 
-  // Manejo de selección de imagen
-  const handleImagenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Procesar archivo seleccionado o soltado por Drag & Drop
+  const procesarArchivoImagen = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setGeneralError("El archivo seleccionado debe ser una imagen válida (JPG, PNG, WebP o GIF).");
+      return;
+    }
 
     // Validar tamaño máximo 2MB
     if (file.size > 2 * 1024 * 1024) {
       setGeneralError("La imagen no puede superar 2 MB. Selecciona una imagen más pequeña.");
-      // Reset input
       if (imagenInputRef.current) imagenInputRef.current.value = "";
       return;
     }
@@ -298,6 +302,36 @@ export function ProductoForm({
     setImagenPreview(previewUrl);
     setQuitarImagenExistente(false);
     setGeneralError(null);
+  };
+
+  // Manejo de selección de imagen
+  const handleImagenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    procesarArchivoImagen(file);
+  };
+
+  // Manejo de arrastrar y soltar (Drag & Drop)
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      procesarArchivoImagen(file);
+    }
   };
 
   const handleQuitarImagen = () => {
@@ -766,29 +800,51 @@ export function ProductoForm({
             </div>
           </div>
 
-          {/* Controles de carga */}
-          <div className="flex-1 space-y-3">
-            <div>
-              <label
-                htmlFor="imagen-producto-input"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50 hover:border-brand hover:text-brand transition-colors cursor-pointer shadow-2xs"
+          {/* Zona de Carga Drag & Drop */}
+          <div className="flex-1 w-full space-y-3">
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => imagenInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 group ${
+                isDragging
+                  ? "border-[var(--primary-brand)] bg-[var(--primary-brand)]/5 scale-[1.01]"
+                  : "border-slate-300 hover:border-slate-400 bg-gray-50/70 hover:bg-gray-100/50"
+              }`}
+            >
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                  isDragging
+                    ? "bg-[var(--primary-brand)]/15 text-[var(--primary-brand)]"
+                    : "bg-white text-slate-500 group-hover:text-slate-800 shadow-2xs border border-slate-200/80"
+                }`}
               >
-                <ImagePlus className="w-4 h-4" />
-                <span>{isEditing && initialData?.imagen_url ? "Cambiar imagen" : "Seleccionar imagen"}</span>
-              </label>
+                <Upload className="w-5 h-5" />
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-slate-800 group-hover:text-slate-900">
+                  Arrastra tu imagen aquí o <span className="underline underline-offset-2" style={{ color: "var(--primary-brand)" }}>haz clic para explorar</span>
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Formatos aceptados: PNG, JPG, WebP o GIF (máx. 2 MB)
+                </p>
+              </div>
+
               <input
                 id="imagen-producto-input"
                 ref={imagenInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/png, image/jpeg, image/webp, image/gif"
                 className="sr-only"
                 onChange={handleImagenChange}
               />
             </div>
 
             {imagenFile && (
-              <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs">
-                <span className="font-medium text-slate-700 truncate max-w-[200px]">
+              <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs animate-in fade-in">
+                <span className="font-medium text-slate-700 truncate max-w-[220px]">
                   {imagenFile.name}
                 </span>
                 <span className="text-slate-400 shrink-0">
@@ -796,8 +852,11 @@ export function ProductoForm({
                 </span>
                 <button
                   type="button"
-                  onClick={handleQuitarImagen}
-                  className="ml-auto text-rose-500 hover:text-rose-700 p-0.5 rounded cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuitarImagen();
+                  }}
+                  className="ml-auto text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
                   title="Quitar imagen seleccionada"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -818,13 +877,9 @@ export function ProductoForm({
 
             {quitarImagenExistente && (
               <p className="text-xs text-rose-600 font-medium">
-                La imagen actual será eliminada al guardar.
+                La imagen actual será eliminada al guardar el producto.
               </p>
             )}
-
-            <p className="text-[11px] text-slate-400">
-              Formatos aceptados: JPG, PNG, WebP, GIF · Tamaño máximo: 2 MB
-            </p>
           </div>
         </div>
       </div>

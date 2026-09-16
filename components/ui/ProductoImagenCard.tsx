@@ -33,7 +33,7 @@ export function ProductoImagenCard({
 
   return (
     <div
-      className={`relative w-full ${aspectClass} bg-stone-50/80 flex items-center justify-center p-2 border-b border-slate-100 overflow-hidden ${className}`}
+      className={`relative w-full ${aspectClass} bg-gray-50 flex items-center justify-center p-2.5 border-b border-slate-100 overflow-hidden ${className}`}
     >
       {imagenUrl ? (
         // eslint-disable-next-line @next/next/no-img-element

@@ -9,6 +9,8 @@ import { ReportesHeader } from "@/components/reportes/ReportesHeader";
 import { FiltrosFecha } from "@/components/reportes/FiltrosFecha";
 import { Calendar, Loader2, DollarSign } from "lucide-react";
 
+import { formatDateLegible } from "@/lib/formatDate";
+
 export default function VentasPorFechasPage() {
   const { token } = useAuth();
   const { formatMoneda: formatMonto } = useMoneda();
@@ -46,6 +48,18 @@ export default function VentasPorFechasPage() {
     cargarDatos();
   }, [cargarDatos]);
 
+  const totalSubtotal = ventas.reduce(
+    (acc, curr) => acc + (Number(curr.subtotal) || 0),
+    0
+  );
+  const totalImpuesto = ventas.reduce(
+    (acc, curr) => acc + (Number(curr.impuesto) || 0),
+    0
+  );
+  const totalDescuento = ventas.reduce(
+    (acc, curr) => acc + (Number(curr.descuento) || 0),
+    0
+  );
   const totalFacturado = ventas.reduce(
     (acc, curr) => acc + (Number(curr.total) || 0),
     0
@@ -59,7 +73,6 @@ export default function VentasPorFechasPage() {
         tipo="ventas-por-fechas"
         desde={desde}
         hasta={hasta}
-        badge={`Total: ${formatMonto(totalFacturado)}`}
       />
 
       <FiltrosFecha
@@ -104,9 +117,11 @@ export default function VentasPorFechasPage() {
                     <td className="py-3 px-4 font-mono font-bold text-slate-900">
                       #{v.numero_factura}
                     </td>
-                    <td className="py-3 px-4 text-slate-600 whitespace-nowrap">{v.fecha}</td>
+                    <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                      {formatDateLegible(v.fecha)}
+                    </td>
                     <td className="py-3 px-4 font-medium text-slate-800">
-                      {v.cliente_nombre || "Consumidor Final"}
+                      {v.cliente_nombre || (typeof v.cliente === "string" ? v.cliente : "Consumidor Final")}
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-slate-600">
                       {formatMonto(v.subtotal)}
@@ -123,6 +138,25 @@ export default function VentasPorFechasPage() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-slate-50/90 font-bold border-t-2 border-slate-200 text-slate-900">
+                <tr>
+                  <td colSpan={3} className="py-3.5 px-4 uppercase tracking-wider text-[11px] text-slate-800">
+                    Total Facturado ({ventas.length} ventas)
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-mono text-slate-700">
+                    {formatMonto(totalSubtotal)}
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-mono text-slate-700">
+                    {formatMonto(totalImpuesto)}
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-mono text-emerald-700">
+                    {totalDescuento > 0 ? `-${formatMonto(totalDescuento)}` : "—"}
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-mono font-extrabold text-slate-950 text-base">
+                    {formatMonto(totalFacturado)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

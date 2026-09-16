@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { AuthProvider } from "@/context/AuthContext";
 import { CompanyConfigProvider } from "@/context/CompanyConfigContext";
+import { SwrProvider } from "@/components/providers/SwrProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -33,7 +34,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans bg-[#FAFAF8] text-[#18181B]">
         <AuthProvider>
-          <CompanyConfigProvider>{children}</CompanyConfigProvider>
+          <CompanyConfigProvider>
+            <SwrProvider>{children}</SwrProvider>
+          </CompanyConfigProvider>
         </AuthProvider>
       </body>
     </html>

@@ -8,10 +8,12 @@ import { useAuth } from "@/context/AuthContext";
 import { usePermisos } from "@/hooks/usePermisos";
 import { obtenerVentas, anularVenta, obtenerVentaPorId, abrirFacturaPDF } from "@/lib/api";
 import { useMoneda } from "@/lib/currency";
+import { formatDateTimeLegible } from "@/lib/formatDate";
 import { Venta } from "@/types/venta";
 import { Button } from "@/components/ui/Button";
 import { DetailDrawer } from "@/components/ui/DetailDrawer";
 import { ViewToggle, ViewMode } from "@/components/ui/ViewToggle";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Receipt,
   Plus,
@@ -242,20 +244,7 @@ export default function VentasPage() {
 
   // Formato de fecha
   const formatDate = (dateStr: string) => {
-    if (!dateStr) return "N/A";
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString("es-ES", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return dateStr;
-    }
+    return formatDateTimeLegible(dateStr);
   };
 
   return (
@@ -796,9 +785,16 @@ export default function VentasPage() {
                   </h3>
 
                   {isLoadingDetalle ? (
-                    <div className="py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-100">
-                      <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#D17B00] mb-2" />
-                      <p className="text-xs">Cargando desglose de productos...</p>
+                    <div className="space-y-2 p-3 bg-slate-50/80 rounded-xl border border-slate-100">
+                      {[1, 2, 3].map((n) => (
+                        <div key={n} className="flex items-center justify-between gap-3 py-1">
+                          <div className="space-y-1 flex-1">
+                            <Skeleton className="h-3.5 w-32 rounded" />
+                            <Skeleton className="h-2.5 w-16 rounded" />
+                          </div>
+                          <Skeleton className="h-3.5 w-14 rounded" />
+                        </div>
+                      ))}
                     </div>
                   ) : ventaSeleccionada.detalles &&
                     ventaSeleccionada.detalles.length > 0 ? (

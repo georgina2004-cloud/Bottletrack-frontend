@@ -21,7 +21,7 @@ import {
   Tag,
   Boxes,
   X,
-  Star,
+  Wine,
 } from "lucide-react";
 
 interface PresentacionesManagerProps {
@@ -401,7 +401,7 @@ export function PresentacionesManager({
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200"
                               title="Presentación predeterminada seleccionada al vender"
                             >
-                              <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
+                              <Wine className="w-3 h-3 text-amber-700" />
                               Predeterminada
                             </span>
                           )}

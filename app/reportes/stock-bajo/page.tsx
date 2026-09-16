@@ -75,21 +75,32 @@ export default function StockBajoPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {stockBajoDetalle.map((item) => {
+                  const stockActual = Number(
+                    item.stock_actual !== undefined && item.stock_actual !== null
+                      ? item.stock_actual
+                      : (item as any).stock ?? (item as any).stockActual ?? 0
+                  );
+                  const stockMinimo = Number(
+                    item.stock_minimo !== undefined && item.stock_minimo !== null
+                      ? item.stock_minimo
+                      : (item as any).stock_min ?? (item as any).stockMinimo ?? 0
+                  );
+
                   const deficit =
                     item.deficit !== undefined
                       ? item.deficit
-                      : Math.max(0, item.stock_minimo - item.stock_actual);
-                  const isCritical = item.stock_actual <= 0;
+                      : Math.max(0, stockMinimo - stockActual);
+                  const isCritical = stockActual <= 0;
 
                   return (
                     <tr key={item.id} className="hover:bg-rose-50/30 transition-colors">
                       <td className="py-3 px-4 font-mono text-slate-500">#{item.id}</td>
                       <td className="py-3 px-4 font-bold text-slate-900">{item.nombre}</td>
                       <td className="py-3 px-4 text-center font-bold text-rose-700">
-                        {item.stock_actual}
+                        {stockActual}
                       </td>
                       <td className="py-3 px-4 text-center text-slate-600 font-semibold">
-                        {item.stock_minimo}
+                        {stockMinimo}
                       </td>
                       <td className="py-3 px-4 text-center font-bold text-amber-700">
                         -{deficit} uds

@@ -354,10 +354,10 @@ function DashboardContent() {
           {/* ========================================================================= */}
           <section
             aria-label="Análisis Gráfico"
-            className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6"
+            className="grid grid-cols-1 xl:grid-cols-3 gap-5 sm:gap-6"
           >
             {/* DATO REAL — Conectado a GET /api/dashboard/tendencia?periodo=... */}
-            <div className="lg:col-span-2">
+            <div className="xl:col-span-2 min-w-0 w-full">
               <SalesTrendChart
                 data={tendenciaData}
                 periodo={periodoTendencia}
@@ -367,7 +367,7 @@ function DashboardContent() {
             </div>
 
             {/* DATO REAL — Conectado a GET /api/dashboard/resumen-inventario (productos_por_categoria) */}
-            <div className="lg:col-span-1">
+            <div className="xl:col-span-1 min-w-0 w-full">
               <CategoryDonutChart
                 data={resumenInventario?.productos_por_categoria}
                 isLoading={isLoadingInventario}

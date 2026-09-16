@@ -36,6 +36,17 @@ export default function InventarioActualPage() {
     cargarDatos();
   }, [cargarDatos]);
 
+  const totalUnidadesStock = productos.reduce((acc, p) => {
+    const s = Number(
+      p.stock_actual !== undefined && p.stock_actual !== null
+        ? p.stock_actual
+        : (p as any).stock !== undefined && (p as any).stock !== null
+        ? (p as any).stock
+        : (p as any).stockActual ?? (p as any).existencias ?? (p as any).cantidad ?? 0
+    );
+    return acc + (isNaN(s) ? 0 : s);
+  }, 0);
+
   return (
     <div className="space-y-6">
       <ReportesHeader
@@ -79,7 +90,24 @@ export default function InventarioActualPage() {
                     typeof p.categoria === "object" && p.categoria
                       ? p.categoria.nombre
                       : p.categoria_nombre || (typeof p.categoria === "string" ? p.categoria : "Sin categoría");
-                  const isStockBajo = p.stock_actual <= p.stock_minimo;
+                  
+                  const stockActual = Number(
+                    p.stock_actual !== undefined && p.stock_actual !== null
+                      ? p.stock_actual
+                      : (p as any).stock !== undefined && (p as any).stock !== null
+                      ? (p as any).stock
+                      : (p as any).stockActual ?? (p as any).existencias ?? (p as any).cantidad ?? 0
+                  );
+
+                  const stockMinimo = Number(
+                    p.stock_minimo !== undefined && p.stock_minimo !== null
+                      ? p.stock_minimo
+                      : (p as any).stock_min !== undefined && (p as any).stock_min !== null
+                      ? (p as any).stock_min
+                      : (p as any).stockMinimo ?? (p as any).min_stock ?? 0
+                  );
+
+                  const isStockBajo = stockActual <= stockMinimo;
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
@@ -100,9 +128,11 @@ export default function InventarioActualPage() {
                         {formatMonto(p.precio_venta)}
                       </td>
                       <td className="py-3 px-4 text-center font-bold text-slate-800">
-                        {p.stock_actual}
+                        {stockActual}
                       </td>
-                      <td className="py-3 px-4 text-center text-slate-500">{p.stock_minimo}</td>
+                      <td className="py-3 px-4 text-center text-slate-500">
+                        {stockMinimo}
+                      </td>
                       <td className="py-3 px-4 text-center">
                         <span
                           className={`inline-block font-bold text-[10px] px-2.5 py-0.5 rounded-full border ${
@@ -118,6 +148,19 @@ export default function InventarioActualPage() {
                   );
                 })}
               </tbody>
+              <tfoot className="bg-slate-50/90 font-bold border-t-2 border-slate-200 text-slate-900">
+                <tr>
+                  <td colSpan={5} className="py-3.5 px-4 uppercase tracking-wider text-[11px] text-slate-800">
+                    Total Catálogo ({productos.length} productos)
+                  </td>
+                  <td className="py-3.5 px-4 text-center font-bold font-mono text-slate-900 text-sm">
+                    {totalUnidadesStock} uds
+                  </td>
+                  <td colSpan={2} className="py-3.5 px-4 text-center text-slate-400 text-[11px]">
+                    —
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

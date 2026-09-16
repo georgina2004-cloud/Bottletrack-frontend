@@ -13,7 +13,6 @@ import {
   Users,
   Receipt,
   ShoppingCart,
-  Sparkles,
   UserCog,
   BarChart3,
   Settings,
@@ -23,7 +22,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Wine,
+  Warehouse,
+  ClipboardCheck,
+  UserCheck,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -45,9 +46,37 @@ export interface NavItem {
   submenu?: SubMenuItem[];
 }
 
+function getRoleIcon(rol?: string | null): React.ComponentType<{ className?: string }> {
+  const r = (rol || "").toLowerCase().trim();
+  if (r.includes("admin")) {
+    return ShieldCheck;
+  }
+  if (
+    r.includes("bodega") ||
+    r.includes("bodeguero") ||
+    r.includes("almacen") ||
+    r.includes("inventario")
+  ) {
+    return Warehouse;
+  }
+  if (
+    r.includes("venta") ||
+    r.includes("cajer") ||
+    r.includes("mostrador") ||
+    r.includes("encargado")
+  ) {
+    return ShoppingCart;
+  }
+  if (r.includes("audit") || r.includes("supervisor")) {
+    return ClipboardCheck;
+  }
+  return UserCheck;
+}
+
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { tieneAcceso, rol } = usePermisos();
+  const RoleIcon = getRoleIcon(rol);
 
   // Estado de colapso con persistencia en localStorage
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
@@ -446,7 +475,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           {!isCollapsed ? (
             <div className="p-2.5 bg-[#FAFAF8] rounded-xl border border-slate-200/60 flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center text-brand shrink-0">
-                <Sparkles className="w-4 h-4" />
+                <RoleIcon className="w-4 h-4" />
               </div>
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -465,7 +494,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               className="w-10 h-10 mx-auto rounded-xl bg-brand/10 flex items-center justify-center text-brand"
               title={rol ? `Rol: ${rol}` : "Trazabilidad Activa"}
             >
-              <Wine className="w-4 h-4" />
+              <RoleIcon className="w-4 h-4" />
             </div>
           )}
         </div>

@@ -46,6 +46,10 @@ export default function ComprasPorProveedorPage() {
     cargarDatos();
   }, [cargarDatos]);
 
+  const totalOrdenesCompras = datos.reduce(
+    (acc, curr) => acc + (Number(curr.total_compras) || 0),
+    0
+  );
   const totalComprado = datos.reduce(
     (acc, curr) => acc + (Number(curr.monto_total) || 0),
     0
@@ -59,7 +63,6 @@ export default function ComprasPorProveedorPage() {
         tipo="compras-por-proveedor"
         desde={desde}
         hasta={hasta}
-        badge={`Total Invertido: ${formatMonto(totalComprado)}`}
       />
 
       <FiltrosFecha
@@ -112,6 +115,19 @@ export default function ComprasPorProveedorPage() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-slate-50/90 font-bold border-t-2 border-slate-200 text-slate-900">
+                <tr>
+                  <td className="py-3.5 px-4 uppercase tracking-wider text-[11px] text-slate-800">
+                    Total General ({datos.length} proveedores)
+                  </td>
+                  <td className="py-3.5 px-4 text-center font-bold text-slate-800">
+                    {totalOrdenesCompras} compras
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-bold font-sans text-slate-950 text-base">
+                    {formatMonto(totalComprado)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

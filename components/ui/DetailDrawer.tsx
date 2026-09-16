@@ -106,7 +106,7 @@ export function DetailDrawer({
               </div>
             )}
             <div className="min-w-0">
-              <h2 className="text-sm font-bold text-[#18181B] tracking-tight truncate">
+              <h2 className="text-sm font-bold text-[#18181B] tracking-tight whitespace-nowrap truncate">
                 {title}
               </h2>
               {subtitle && (

@@ -189,6 +189,8 @@ body {
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
   }
   body {
     @apply bg-background text-foreground;
@@ -196,4 +198,23 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* ── Scrollbars Personalizados Delgados y Sutiles ───────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }

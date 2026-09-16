@@ -904,7 +904,12 @@ function UsuariosContent() {
 
           {/* Modal de Confirmación para Desactivar Usuario */}
           {usuarioParaDesactivar && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+            <div
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !isDeactivating) setUsuarioParaDesactivar(null);
+              }}
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150"
+            >
               <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95 duration-150">
                 <div className="flex items-center gap-3 text-rose-600">
                   <div className="p-2.5 bg-rose-50 rounded-xl">
@@ -983,6 +988,9 @@ function UsuariosContent() {
           {/* Modal de Eliminación Definitiva */}
           {usuarioParaEliminar && (
             <div
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !isEliminating) setUsuarioParaEliminar(null);
+              }}
               className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150"
               role="dialog"
               aria-modal="true"

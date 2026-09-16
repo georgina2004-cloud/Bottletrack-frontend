@@ -836,7 +836,15 @@ function CategoriasContent() {
 
         {/* Modal de confirmación de eliminación */}
         {categoriaParaEliminar && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150" role="dialog" aria-modal="true" aria-labelledby="modal-eliminar-titulo">
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !isDeleting) setCategoriaParaEliminar(null);
+            }}
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-eliminar-titulo"
+          >
             <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-100 space-y-4 animate-in zoom-in-95 duration-150">
               <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto"><AlertTriangle className="w-6 h-6" /></div>
               <div className="text-center space-y-1.5">

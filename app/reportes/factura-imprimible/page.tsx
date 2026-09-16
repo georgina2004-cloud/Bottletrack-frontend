@@ -5,8 +5,10 @@ import { useAuth } from "@/context/AuthContext";
 import { obtenerVentas, descargarFacturaPDF } from "@/lib/api";
 import { Venta } from "@/types/venta";
 import { useMoneda } from "@/lib/currency";
+import { formatDateLegible } from "@/lib/formatDate";
 import { ReportesHeader } from "@/components/reportes/ReportesHeader";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search,
   FileDown,
@@ -107,9 +109,16 @@ export default function FacturaImprimiblePage() {
           </div>
 
           {isLoadingFacturas ? (
-            <div className="py-12 text-center text-slate-400">
-              <Loader2 className="w-5 h-5 animate-spin text-brand mx-auto mb-2" />
-              <span className="text-xs">Buscando facturas...</span>
+            <div className="space-y-2 py-2">
+              {[1, 2, 3, 4].map((n) => (
+                <div key={n} className="p-2.5 rounded-xl border border-slate-100 space-y-1.5">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-24 rounded" />
+                    <Skeleton className="h-4 w-16 rounded" />
+                  </div>
+                  <Skeleton className="h-3 w-36 rounded" />
+                </div>
+              ))}
             </div>
           ) : ventasEncontradas.length === 0 ? (
             <div className="py-8 text-center text-slate-400 text-xs">
@@ -131,7 +140,7 @@ export default function FacturaImprimiblePage() {
                   `}
                 >
                   <div>
-                    <span className="font-mono font-bold block">
+                    <span className="font-mono font-bold block whitespace-nowrap">
                       #{v.numero_factura}
                     </span>
                     <span className="text-[11px] text-slate-500 truncate block max-w-[160px]">
@@ -146,8 +155,8 @@ export default function FacturaImprimiblePage() {
                     >
                       {formatMonto(v.total)}
                     </span>
-                    <span className="text-[10px] text-slate-400">
-                      {v.fecha?.slice(0, 10)}
+                    <span className="text-[10px] text-slate-400 block whitespace-nowrap">
+                      {formatDateLegible(v.fecha || v.created_at)}
                     </span>
                   </div>
                 </div>
@@ -156,17 +165,23 @@ export default function FacturaImprimiblePage() {
           )}
         </div>
 
-        {/* Columna Derecha: Previsualización de Factura */}
-        <div className="lg:col-span-2 bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
+        {/* Columna Derecha: Vista Previa y Exportación del Comprobante */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
           {pdfSuccess && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+            <div
+              role="status"
+              className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 animate-in fade-in"
+            >
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{pdfSuccess}</span>
             </div>
           )}
 
           {pdfError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
+            <div
+              role="alert"
+              className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 animate-in fade-in"
+            >
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{pdfError}</span>
             </div>
@@ -180,11 +195,11 @@ export default function FacturaImprimiblePage() {
                   <span className="text-[11px] font-bold text-brand uppercase tracking-wider block">
                     Comprobante de Venta
                   </span>
-                  <h2 className="text-xl sm:text-2xl font-mono font-bold text-slate-900">
+                  <h2 className="text-xl sm:text-2xl font-mono font-bold text-slate-900 whitespace-nowrap">
                     Factura #{ventaSeleccionada.numero_factura}
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Fecha: {ventaSeleccionada.fecha} • Vendedor:{" "}
+                    Fecha: <span className="font-semibold text-slate-700">{formatDateLegible(ventaSeleccionada.fecha || ventaSeleccionada.created_at)}</span> • Vendedor:{" "}
                     <span className="font-semibold text-slate-700">
                       {ventaSeleccionada.usuario?.name || "Cajero / Vendedor"}
                     </span>

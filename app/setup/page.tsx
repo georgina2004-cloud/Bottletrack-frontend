@@ -37,7 +37,8 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  Sparkles,
+  ShieldCheck,
+  Wine,
 } from "lucide-react";
 
 /**
@@ -859,7 +860,7 @@ export default function SetupPage() {
                 </div>
 
                 <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs text-slate-700 flex items-start gap-2.5">
-                  <Sparkles className="w-4 h-4 text-slate-800 shrink-0 mt-0.5" />
+                  <ShieldCheck className="w-4 h-4 text-slate-800 shrink-0 mt-0.5" />
                   <span>
                     Esta cuenta tendrá control total sobre la configuración, inventario, ventas,
                     compras y gestión de usuarios.
@@ -978,7 +979,7 @@ export default function SetupPage() {
                     ) : (
                       <>
                         <span>Finalizar e Inicializar Licorería</span>
-                        <Sparkles className="w-4 h-4" />
+                        <Wine className="w-4 h-4" />
                       </>
                     )}
                   </Button>

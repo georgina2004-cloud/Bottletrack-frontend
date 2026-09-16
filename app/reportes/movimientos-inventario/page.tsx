@@ -8,6 +8,7 @@ import { useMoneda } from "@/lib/currency";
 import { ReportesHeader } from "@/components/reportes/ReportesHeader";
 import { FiltrosFecha } from "@/components/reportes/FiltrosFecha";
 import { ArrowLeftRight, ArrowDownLeft, ArrowUpRight, Loader2 } from "lucide-react";
+import { formatDateTimeLegible } from "@/lib/formatDate";
 
 export default function MovimientosInventarioPage() {
   const { token } = useAuth();
@@ -100,7 +101,9 @@ export default function MovimientosInventarioPage() {
 
                   return (
                     <tr key={`${m.fecha}-${idx}`} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{m.fecha}</td>
+                      <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
+                        {formatDateTimeLegible(m.fecha)}
+                      </td>
                       <td className="py-3 px-4">
                         <span
                           className={`inline-flex items-center gap-1 font-bold text-[10px] px-2.5 py-0.5 rounded-full border ${
