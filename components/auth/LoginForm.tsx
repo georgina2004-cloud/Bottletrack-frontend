@@ -213,7 +213,7 @@ export function LoginForm() {
           <input
             type="checkbox"
             disabled={isSubmitting}
-            className="w-4 h-4 rounded border-slate-300 text-[#D17B00] focus:ring-[#D17B00] focus:ring-offset-0 cursor-pointer accent-[#D17B00]"
+            className="w-4 h-4 rounded border-slate-300 text-[var(--primary-brand)] focus:ring-[var(--primary-brand)] focus:ring-offset-0 cursor-pointer accent-[var(--primary-brand)]"
             {...register("rememberMe")}
           />
           <span>Recordarme</span>
@@ -226,7 +226,7 @@ export function LoginForm() {
             // TODO: [Recuperación de contraseña] Ruta o modal para solicitar reset de password
             console.log("Recuperación de contraseña solicitada");
           }}
-          className="text-slate-600 hover:text-[#D17B00] transition-colors font-medium hover:underline underline-offset-2"
+          className="text-slate-600 hover:text-[var(--primary-brand)] transition-colors font-medium hover:underline underline-offset-2"
         >
           ¿Olvidaste tu contraseña?
         </a>
@@ -239,7 +239,7 @@ export function LoginForm() {
           size="lg"
           isLoading={isSubmitting}
           disabled={isSubmitting}
-          className="w-full text-base font-semibold tracking-wide shadow-md shadow-[#D17B00]/25 hover:shadow-lg hover:shadow-[#D17B00]/35 active:scale-[0.99] transition-all bg-[#D17B00] hover:bg-[#B56900] active:bg-[#9A5400]"
+          className="w-full text-base font-semibold tracking-wide shadow-md hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
         >
           {isSubmitting ? "Iniciando sesión..." : "Ingresar"}
         </Button>
@@ -250,7 +250,7 @@ export function LoginForm() {
         <p className="text-xs text-slate-500">
           ¿No tienes acceso?{" "}
           <span
-            className="text-slate-700 font-medium hover:text-[#D17B00] transition-colors cursor-pointer"
+            className="text-slate-700 font-medium hover:text-[var(--primary-brand)] transition-colors cursor-pointer"
             title="Contacta al administrador del sistema"
           >
             Contacta al administrador

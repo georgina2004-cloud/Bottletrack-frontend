@@ -13,7 +13,7 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <div className="min-h-screen w-full bg-[#FAFAF8] flex items-center justify-center p-4">
-          <Loader2 className="w-8 h-8 animate-spin text-[#D17B00]" />
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--primary-brand)]" />
         </div>
       }
     >

@@ -2,8 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Wordmark } from "@/components/auth/Wordmark";
-import { DistilleryIllustration } from "@/components/auth/DistilleryIllustration";
+import { StorefrontIllustration } from "@/components/auth/StorefrontIllustration";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { useCompanyConfig } from "@/context/CompanyConfigContext";
 import { verificarEstadoSetup } from "@/lib/api";
@@ -48,8 +47,8 @@ export function LoginContent() {
     return (
       <main className="min-h-screen w-full bg-[#FAFAF8] flex flex-col items-center justify-center p-4">
         <div className="flex flex-col items-center">
-          <div className="w-14 h-14 rounded-2xl bg-[#D17B00]/10 border border-[#D17B00]/20 flex items-center justify-center mb-4 shadow-sm">
-            <Loader2 className="w-7 h-7 animate-spin text-[#D17B00]" />
+          <div className="w-14 h-14 rounded-2xl bg-[var(--primary-brand)]/10 border border-[var(--primary-brand)]/20 flex items-center justify-center mb-4 shadow-sm">
+            <Loader2 className="w-7 h-7 animate-spin text-[var(--primary-brand)]" />
           </div>
           <h2 className="font-serif font-bold text-xl text-slate-800 tracking-tight">
             {nombreLicoreria || "BottleTrack"}
@@ -66,7 +65,7 @@ export function LoginContent() {
     <main className="min-h-screen w-full bg-[#FAFAF8] flex items-center justify-center p-4 sm:p-6 md:p-8 lg:p-12 relative overflow-hidden">
       {/* Luces ambientales sutiles de fondo */}
       <div
-        className="absolute -top-32 -left-32 w-[32rem] h-[32rem] bg-[#D17B00]/5 rounded-full blur-3xl pointer-events-none"
+        className="absolute -top-32 -left-32 w-[32rem] h-[32rem] bg-[var(--primary-brand)]/5 rounded-full blur-3xl pointer-events-none"
         aria-hidden="true"
       />
       <div
@@ -76,8 +75,8 @@ export function LoginContent() {
 
       {/* Tarjeta flotante principal */}
       <div className="w-full max-w-5xl xl:max-w-6xl bg-white rounded-[2.5rem] shadow-2xl shadow-slate-900/5 flex flex-col lg:flex-row relative z-10 overflow-hidden p-2.5 sm:p-3.5 lg:p-3.5 border border-slate-200/80">
-        {/* PANEL IZQUIERDO: Branding Dinámico e Ilustración */}
-        <section className="w-full lg:w-1/2 bg-[#FAFAF8] text-[#18181B] flex flex-col justify-between p-8 sm:p-10 lg:p-12 relative overflow-hidden rounded-[2rem] border border-slate-100 shadow-xs">
+        {/* PANEL IZQUIERDO: Ilustración de Fachada */}
+        <section className="w-full lg:w-1/2 bg-[#FAFAF8] text-[#18181B] flex flex-col items-center justify-center p-8 sm:p-10 lg:p-12 relative overflow-hidden rounded-[2rem] border border-slate-100 shadow-xs">
           {/* Patrón geométrico sutil */}
           <svg
             className="absolute inset-0 w-full h-full stroke-slate-200/50 [mask-image:radial-gradient(100%_100%_at_top_left,white,transparent)] pointer-events-none"
@@ -93,32 +92,14 @@ export function LoginContent() {
 
           {/* Resplandor decorativo interno */}
           <div
-            className="absolute -top-24 -left-24 w-80 h-80 bg-[#D17B00]/5 rounded-full blur-3xl pointer-events-none"
+            className="absolute -top-24 -left-24 w-80 h-80 bg-[var(--primary-brand)]/5 rounded-full blur-3xl pointer-events-none"
             aria-hidden="true"
           />
 
-          {/* 1. Header con Wordmark Dinámico (Nombre y Logo) */}
-          <header className="relative z-10">
-            <Wordmark size="lg" theme="dark" showSubtitle tagline="CONTROL DE INVENTARIO" />
-          </header>
-
-          {/* 2. Centro: Ilustración artesanal */}
-          <div className="relative z-10 my-6 lg:my-0 flex flex-col items-center justify-center">
-            <DistilleryIllustration className="w-full max-w-xs sm:max-w-sm" />
+          {/* Ilustración artesanal de fachada */}
+          <div className="relative z-10 w-full flex items-center justify-center">
+            <StorefrontIllustration className="w-full max-w-sm sm:max-w-md" />
           </div>
-
-          {/* 3. Footer del panel izquierdo */}
-          <footer className="relative z-10 flex items-center justify-between pt-6 border-t border-slate-200/80 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-[#D17B00] animate-pulse" />
-              <span className="text-slate-600 font-medium tracking-wide uppercase text-[11px]">
-                Panel administrativo
-              </span>
-            </div>
-            <span className="text-slate-400 hidden sm:inline text-[11px]">
-              {nombreLicoreria || "BottleTrack"} v1.0
-            </span>
-          </footer>
         </section>
 
         {/* PANEL DERECHO: Formulario de Login */}
@@ -130,7 +111,7 @@ export function LoginContent() {
                 role="alert"
                 className="mb-6 p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5 shadow-2xs animate-in fade-in"
               >
-                <Info className="w-4 h-4 text-[#D17B00] shrink-0 mt-0.5" />
+                <Info className="w-4 h-4 text-[var(--primary-brand)] shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold block">Sistema ya inicializado</span>
                   <span>

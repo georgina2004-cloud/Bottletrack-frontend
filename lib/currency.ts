@@ -3,11 +3,7 @@
 import { useCompanyConfig } from "@/context/CompanyConfigContext";
 import { useCallback } from "react";
 
-/**
- * Formatea un monto numérico con el símbolo de moneda antepuesto y 2 decimales.
- * Ej: formatMoney(1239.7, "C$") => "C$ 1,239.70"
- *     formatMoney(1239.7, "$") => "$ 1,239.70"
- */
+
 export function formatMoney(
   valor: number | string | null | undefined,
   moneda: string = "C$"
