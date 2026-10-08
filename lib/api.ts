@@ -2785,9 +2785,12 @@ export async function anularCompra(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(
+    const error: any = new Error(
       data?.message || `Error al anular la compra (${response.status})`
     );
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data || { message: "Compra anulada correctamente." };

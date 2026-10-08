@@ -6,7 +6,7 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { ProtectedByRole } from "@/components/auth/ProtectedByRole";
 import { useAuth } from "@/context/AuthContext";
 import { usePermisos } from "@/hooks/usePermisos";
-import { obtenerCompras, obtenerCompraPorId } from "@/lib/api";
+import { obtenerCompras, obtenerCompraPorId, anularCompra } from "@/lib/api";
 import { useMoneda } from "@/lib/currency";
 import { Compra } from "@/types/compra";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +17,7 @@ import {
   Plus,
   Search,
   AlertTriangle,
+  CheckCircle2,
   RefreshCw,
   X,
   ChevronRight,
@@ -29,13 +30,15 @@ import {
   Package,
   FileText,
   Hash,
+  Ban,
 } from "lucide-react";
 
 export default function ComprasPage() {
   const { token, user } = useAuth();
-  const { puedeEditar, rol } = usePermisos();
+  const { puedeEditar, tienePermiso } = usePermisos();
 
   const tienePermisoEscritura = puedeEditar("compras");
+  const tienePermisoAnular = tienePermiso("compras.anular") || tienePermisoEscritura;
 
   // Estado del listado y paginación
   const [compras, setCompras] = useState<Compra[]>([]);
@@ -63,14 +66,44 @@ export default function ComprasPage() {
   });
   const [page, setPage] = useState<number>(1);
 
-  // Estados de carga y error
+  // Estados de carga y error/éxito
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Drawer / Detalle de Compra
   const [compraSeleccionada, setCompraSeleccionada] = useState<Compra | null>(null);
   const [isLoadingDetalle, setIsLoadingDetalle] = useState<boolean>(false);
+
+  // Modal de Confirmación Fuerte para Anulación
+  const [compraParaAnular, setCompraParaAnular] = useState<Compra | null>(null);
+  const [textoConfirmacion, setTextoConfirmacion] = useState<string>("");
+  const [isAnulando, setIsAnulando] = useState<boolean>(false);
+  const [errorAnulacion, setErrorAnulacion] = useState<string | null>(null);
+
+  // Recarga reutilizable tras operaciones o manual
+  const recargarCompras = useCallback(async () => {
+    try {
+      const res = await obtenerCompras(
+        {
+          page,
+          busqueda: terminoBuscado,
+          desde: filtroFechas.desde || undefined,
+          hasta: filtroFechas.hasta || undefined,
+        },
+        token
+      );
+      setCompras(res.data || []);
+      setPagination({
+        currentPage: res.current_page || 1,
+        lastPage: res.last_page || 1,
+        total: res.total ?? (res.data ? res.data.length : 0),
+      });
+    } catch (err: unknown) {
+      console.error("Error al recargar compras:", err);
+    }
+  }, [page, terminoBuscado, filtroFechas, token]);
 
   // Carga de compras desde el backend al cambiar página o filtros
   useEffect(() => {
@@ -124,21 +157,7 @@ export default function ComprasPage() {
     setIsRefreshing(true);
     setErrorMessage(null);
     try {
-      const res = await obtenerCompras(
-        {
-          page,
-          busqueda: terminoBuscado,
-          desde: filtroFechas.desde || undefined,
-          hasta: filtroFechas.hasta || undefined,
-        },
-        token
-      );
-      setCompras(res.data || []);
-      setPagination({
-        currentPage: res.current_page || 1,
-        lastPage: res.last_page || 1,
-        total: res.total ?? (res.data ? res.data.length : 0),
-      });
+      await recargarCompras();
     } catch (err: unknown) {
       console.error("Error al recargar compras:", err);
       setErrorMessage(
@@ -149,7 +168,7 @@ export default function ComprasPage() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [page, terminoBuscado, filtroFechas, token]);
+  }, [recargarCompras]);
 
   // Manejador de búsqueda y filtros
   const handleFiltrar = (e: React.FormEvent) => {
@@ -184,6 +203,64 @@ export default function ComprasPage() {
       console.error("Error al cargar detalle de compra:", err);
     } finally {
       setIsLoadingDetalle(false);
+    }
+  };
+
+  // Abrir modal de anulación
+  const handleIniciarAnulacion = (compra: Compra) => {
+    setCompraParaAnular(compra);
+    setTextoConfirmacion("");
+    setErrorAnulacion(null);
+  };
+
+  // Ejecutar anulación
+  const handleConfirmarAnular = async () => {
+    if (!compraParaAnular) return;
+    if (textoConfirmacion.trim().toUpperCase() !== "ANULAR") return;
+
+    setIsAnulando(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setErrorAnulacion(null);
+
+    try {
+      const res = await anularCompra(compraParaAnular.id, token);
+      setSuccessMessage(
+        res.message ||
+          `La compra #${compraParaAnular.id} fue anulada exitosamente y su stock descontado del inventario.`
+      );
+
+      // Si el drawer está abierto para esta compra, actualizar estado a anulada
+      if (compraSeleccionada?.id === compraParaAnular.id) {
+        setCompraSeleccionada((prev) =>
+          prev ? { ...prev, estado_activa: false } : null
+        );
+      }
+
+      setCompraParaAnular(null);
+      setTextoConfirmacion("");
+      await recargarCompras();
+    } catch (err: any) {
+      console.error("Error al anular compra:", err);
+      const mensaje =
+        err instanceof Error ? err.message : "Error al anular la compra.";
+
+      if (err?.status === 409) {
+        // 409: Ya estaba anulada -> mostrar mensaje y refrescar lista
+        setErrorMessage(mensaje);
+        setCompraParaAnular(null);
+        setTextoConfirmacion("");
+        await recargarCompras();
+      } else if (err?.status === 422) {
+        // 422: Stock insuficiente para anular -> mantener modal abierto mostrando el mensaje exacto
+        setErrorAnulacion(mensaje);
+      } else {
+        // 403 u otros
+        setErrorAnulacion(mensaje);
+        setErrorMessage(mensaje);
+      }
+    } finally {
+      setIsAnulando(false);
     }
   };
 
@@ -243,7 +320,7 @@ export default function ComprasPage() {
                     Historial de Compras
                   </h1>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Haz clic en el número de factura para consultar los detalles de la compra.
+                    Haz clic en el número de factura para consultar los detalles de la compra o anularla.
                   </p>
                 </div>
               </div>
@@ -255,7 +332,7 @@ export default function ComprasPage() {
                   size="sm"
                   onClick={handleManualRefresh}
                   disabled={isLoading || isRefreshing}
-                  className="text-xs gap-1.5 shadow-2xs"
+                  className="text-xs gap-1.5 shadow-2xs cursor-pointer"
                   title="Recargar compras"
                 >
                   <RefreshCw
@@ -282,8 +359,28 @@ export default function ComprasPage() {
           </div>
 
           {/* ========================================================================= */}
-          {/* ALERTA DE ERROR                                                           */}
+          {/* ALERTAS DE ÉXITO Y ERROR                                                  */}
           {/* ========================================================================= */}
+          {successMessage && (
+            <div
+              role="alert"
+              className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-2xs animate-in fade-in slide-in-from-top-2 duration-200"
+            >
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <p className="font-medium">{successMessage}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSuccessMessage(null)}
+                className="text-emerald-600 hover:text-emerald-800 p-1 rounded-md transition-colors cursor-pointer"
+                title="Cerrar notificación"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {errorMessage && (
             <div
               role="alert"
@@ -305,75 +402,62 @@ export default function ComprasPage() {
           )}
 
           {/* ========================================================================= */}
-          {/* BARRA DE FILTROS: BÚSQUEDA, RANGO DE FECHAS Y TOGGLE DE VISTA             */}
+          {/* BARRA DE BÚSQUEDA, FILTROS DE FECHA Y TOGGLE DE VISTA                     */}
           {/* ========================================================================= */}
-          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
-            <form onSubmit={handleFiltrar} className="flex flex-col lg:flex-row gap-3 flex-1">
-              {/* Búsqueda por proveedor o factura */}
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+            <form
+              onSubmit={handleFiltrar}
+              className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1"
+            >
+              {/* Buscador de texto */}
+              <div className="relative flex-1 min-w-[240px]">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-4 h-4" />
+                </div>
                 <input
                   type="text"
-                  placeholder="Buscar por n° de factura o proveedor..."
+                  placeholder="Buscar por N° factura, proveedor o ID..."
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:border-brand focus:ring-2 focus:ring-brand/15 transition-all text-slate-800 placeholder:text-slate-400"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 transition-all"
                 />
-                {busqueda && (
-                  <button
-                    type="button"
-                    onClick={() => setBusqueda("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
               </div>
 
               {/* Rango de fechas */}
               <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="text-slate-400 text-[11px]">Desde:</span>
-                  <input
-                    type="date"
-                    value={desde}
-                    onChange={(e) => setDesde(e.target.value)}
-                    className="bg-transparent text-slate-700 text-xs focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="text-slate-400 text-[11px]">Hasta:</span>
-                  <input
-                    type="date"
-                    value={hasta}
-                    onChange={(e) => setHasta(e.target.value)}
-                    className="bg-transparent text-slate-700 text-xs focus:outline-none"
-                  />
-                </div>
+                <input
+                  type="date"
+                  value={desde}
+                  onChange={(e) => setDesde(e.target.value)}
+                  className="px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:border-brand transition-all"
+                  title="Fecha desde"
+                />
+                <span className="text-slate-400 text-xs">a</span>
+                <input
+                  type="date"
+                  value={hasta}
+                  onChange={(e) => setHasta(e.target.value)}
+                  className="px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:border-brand transition-all"
+                  title="Fecha hasta"
+                />
               </div>
 
-              {/* Botones de acción de filtro */}
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  size="sm"
-                  className="text-xs h-[38px] px-4 font-semibold"
-                >
-                  <Search className="w-3.5 h-3.5 mr-1.5" />
+              {/* Botones de filtro */}
+              <div className="flex items-center gap-2">
+                <Button type="submit" size="sm" className="text-xs px-3.5 h-9 cursor-pointer">
                   Filtrar
                 </Button>
+
                 {hayFiltrosActivos && (
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     onClick={handleLimpiarFiltros}
-                    className="text-xs h-[38px] text-slate-500 hover:text-slate-800 cursor-pointer"
+                    className="text-xs px-2.5 h-9 text-slate-500 cursor-pointer"
+                    title="Limpiar filtros"
                   >
+                    <X className="w-3.5 h-3.5 mr-1" />
                     Limpiar
                   </Button>
                 )}
@@ -399,12 +483,13 @@ export default function ComprasPage() {
                       <th className="py-3.5 px-4 font-semibold">Registrado por</th>
                       <th className="py-3.5 px-4 font-semibold">Fecha</th>
                       <th className="py-3.5 px-4 font-semibold text-right">Total</th>
+                      <th className="py-3.5 px-4 font-semibold text-center">Estado</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {isLoading ? (
                       <tr>
-                        <td colSpan={5} className="py-16 text-center text-slate-400">
+                        <td colSpan={6} className="py-16 text-center text-slate-400">
                           <div className="flex flex-col items-center justify-center gap-2">
                             <RefreshCw className="w-6 h-6 animate-spin text-brand" />
                             <p className="text-xs font-medium text-slate-500">
@@ -415,7 +500,7 @@ export default function ComprasPage() {
                       </tr>
                     ) : compras.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-16 text-center text-slate-400">
+                        <td colSpan={6} className="py-16 text-center text-slate-400">
                           <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
                             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                               <ShoppingCart className="w-6 h-6 text-slate-400" />
@@ -430,7 +515,7 @@ export default function ComprasPage() {
                             </p>
                             {tienePermisoEscritura && (
                               <Link href="/compras/nueva">
-                                <Button size="sm" className="text-xs gap-1.5 shadow-sm shadow-brand/20">
+                                <Button size="sm" className="text-xs gap-1.5 shadow-sm shadow-brand/20 cursor-pointer">
                                   <Plus className="w-4 h-4" />
                                   <span>Registrar Primera Compra</span>
                                 </Button>
@@ -441,13 +526,15 @@ export default function ComprasPage() {
                       </tr>
                     ) : (
                       compras.map((compra) => {
+                        const estaActiva = compra.estado_activa !== false;
                         const isSelected = compraSeleccionada?.id === compra.id;
+
                         return (
                           <tr
                             key={compra.id}
                             className={`hover:bg-slate-50/70 transition-colors group ${
                               isSelected ? "bg-brand/5" : ""
-                            }`}
+                            } ${!estaActiva ? "bg-slate-50/40 opacity-80" : ""}`}
                           >
                             {/* N° Factura Proveedor — clickeable para abrir DetailDrawer */}
                             <td className="py-3.5 px-4 font-mono font-semibold">
@@ -494,6 +581,19 @@ export default function ComprasPage() {
                             <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
                               {formatMoney(compra.total)}
                             </td>
+
+                            {/* Estado */}
+                            <td className="py-3.5 px-4 text-center">
+                              {estaActiva ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Activa
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                  Anulada
+                                </span>
+                              )}
+                            </td>
                           </tr>
                         );
                       })
@@ -535,12 +635,12 @@ export default function ComprasPage() {
                         : "Aún no se han registrado órdenes de compra a proveedores."}
                     </p>
                     {hayFiltrosActivos ? (
-                      <Button variant="outline" size="sm" onClick={handleLimpiarFiltros} className="text-xs">
+                      <Button variant="outline" size="sm" onClick={handleLimpiarFiltros} className="text-xs cursor-pointer">
                         Limpiar filtros
                       </Button>
                     ) : tienePermisoEscritura ? (
                       <Link href="/compras/nueva">
-                        <Button size="sm" className="text-xs gap-1.5 shadow-sm shadow-brand/20">
+                        <Button size="sm" className="text-xs gap-1.5 shadow-sm shadow-brand/20 cursor-pointer">
                           <Plus className="w-4 h-4" />
                           <span>Registrar Primera Compra</span>
                         </Button>
@@ -551,6 +651,7 @@ export default function ComprasPage() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
                   {compras.map((compra) => {
+                    const estaActiva = compra.estado_activa !== false;
                     const isSelected = compraSeleccionada?.id === compra.id;
                     const tieneFactura = Boolean(
                       compra.numero_factura_proveedor && compra.numero_factura_proveedor.trim() !== ""
@@ -564,12 +665,25 @@ export default function ComprasPage() {
                           isSelected
                             ? "ring-2 ring-[var(--primary-brand)] border-transparent shadow-md"
                             : "border-slate-200/80 hover:border-slate-300"
-                        }`}
+                        } ${!estaActiva ? "bg-slate-50/50 opacity-80" : ""}`}
                       >
                         {/* Encabezado de la tarjeta */}
                         <div className="flex items-start justify-between gap-2 mb-3">
-                          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 border border-amber-200/60 flex items-center justify-center shrink-0">
-                            <ShoppingCart className="w-4 h-4" />
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                                estaActiva
+                                  ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                                  : "bg-rose-50 text-rose-700 border border-rose-200/60"
+                              }`}
+                            >
+                              <ShoppingCart className="w-4 h-4" />
+                            </div>
+                            {!estaActiva && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                Anulada
+                              </span>
+                            )}
                           </div>
                           <span
                             className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border ${
@@ -653,7 +767,7 @@ export default function ComprasPage() {
                   size="sm"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={pagination.currentPage <= 1 || isLoading}
-                  className="text-xs h-8 px-2.5"
+                  className="text-xs h-8 px-2.5 cursor-pointer"
                 >
                   <ChevronLeft className="w-3.5 h-3.5 mr-1" />
                   Anterior
@@ -668,7 +782,7 @@ export default function ComprasPage() {
                   size="sm"
                   onClick={() => setPage((p) => Math.min(pagination.lastPage, p + 1))}
                   disabled={pagination.currentPage >= pagination.lastPage || isLoading}
-                  className="text-xs h-8 px-2.5"
+                  className="text-xs h-8 px-2.5 cursor-pointer"
                 >
                   Siguiente
                   <ChevronRight className="w-3.5 h-3.5 ml-1" />
@@ -682,7 +796,10 @@ export default function ComprasPage() {
           {/* ========================================================================= */}
           <DetailDrawer
             isOpen={!!compraSeleccionada}
-            onClose={() => setCompraSeleccionada(null)}
+            onClose={() => {
+              setCompraSeleccionada(null);
+              setErrorAnulacion(null);
+            }}
             title={
               compraSeleccionada
                 ? `Compra #${compraSeleccionada.id}`
@@ -711,6 +828,21 @@ export default function ComprasPage() {
                       <span className="font-mono font-semibold text-slate-700">
                         #{compraSeleccionada.id}
                       </span>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3 px-4 py-2.5">
+                      <div className="flex items-center gap-1.5 text-slate-500 shrink-0">
+                        <span>Estado</span>
+                      </div>
+                      {compraSeleccionada.estado_activa !== false ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Activa
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                          Anulada
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-start justify-between gap-3 px-4 py-2.5">
@@ -833,9 +965,155 @@ export default function ComprasPage() {
                     </span>
                   </div>
                 </div>
+
+                {/* Acciones del Drawer */}
+                <div className="pt-2 border-t border-slate-100 space-y-2.5">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Acciones
+                  </p>
+
+                  {errorAnulacion && (
+                    <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                      <div>
+                        <p className="font-bold">No se pudo anular la compra</p>
+                        <p className="text-[11px] mt-0.5">{errorAnulacion}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2">
+                    {/* Botón Anular (si tiene permiso y está activa) */}
+                    {tienePermisoAnular && compraSeleccionada.estado_activa !== false && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleIniciarAnulacion(compraSeleccionada)}
+                        disabled={isAnulando}
+                        className="w-full text-xs gap-2 justify-center text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300 cursor-pointer"
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                        <span>Anular compra y revertir stock</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </DetailDrawer>
+
+          {/* ========================================================================= */}
+          {/* MODAL DE CONFIRMACIÓN FUERTE PARA ANULAR COMPRA                            */}
+          {/* ========================================================================= */}
+          {compraParaAnular && (
+            <div
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+              role="alertdialog"
+              aria-modal="true"
+            >
+              <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-rose-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div className="p-6 space-y-4">
+                  <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 mx-auto">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+
+                  <div className="text-center">
+                    <h3 className="text-lg font-bold text-slate-900">
+                      ¿Confirmar anulación de compra?
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Esta operación es irreversible y descontará las existencias del inventario.
+                    </p>
+                  </div>
+
+                  {errorAnulacion && (
+                    <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2 animate-in fade-in duration-150">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold">No se pudo anular la compra</p>
+                        <p className="text-[11px] mt-0.5 leading-relaxed">{errorAnulacion}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-900 space-y-1.5">
+                    <p className="font-semibold">
+                      Compra: #{compraParaAnular.id}{" "}
+                      {compraParaAnular.numero_factura_proveedor &&
+                        `(${compraParaAnular.numero_factura_proveedor})`}
+                    </p>
+                    <p>
+                      Proveedor:{" "}
+                      <span className="font-medium">
+                        {compraParaAnular.proveedor?.razon_social || "No asignado"}
+                      </span>
+                    </p>
+                    <p>
+                      Monto total:{" "}
+                      <span className="font-bold font-mono">
+                        {formatMoney(compraParaAnular.total)}
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-amber-800/90 leading-relaxed pt-1 border-t border-amber-200/60">
+                      Al anular esta compra, se descontará automáticamente del stock la cantidad
+                      ingresada de cada producto. Si algún producto no cuenta con stock suficiente para
+                      revertir, la anulación será rechazada.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Para confirmar, escribe la palabra <span className="text-rose-600 font-bold">ANULAR</span> abajo:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Escribe ANULAR para confirmar"
+                      value={textoConfirmacion}
+                      onChange={(e) => setTextoConfirmacion(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 text-slate-900 font-mono text-center tracking-widest uppercase"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="flex gap-2.5 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setCompraParaAnular(null);
+                        setErrorAnulacion(null);
+                        setTextoConfirmacion("");
+                      }}
+                      disabled={isAnulando}
+                      className="w-1/2 text-xs cursor-pointer"
+                    >
+                      Cancelar
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmarAnular}
+                      disabled={
+                        isAnulando ||
+                        textoConfirmacion.trim().toUpperCase() !== "ANULAR"
+                      }
+                      className="w-1/2 inline-flex items-center justify-center font-medium rounded-lg text-xs py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      {isAnulando ? (
+                        <div className="flex items-center gap-1.5">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Anulando...</span>
+                        </div>
+                      ) : (
+                        <span>Confirmar Anulación</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedByRole>
