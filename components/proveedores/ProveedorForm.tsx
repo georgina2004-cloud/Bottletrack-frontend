@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Proveedor, ProveedorPayload } from "@/types/proveedor";
-import { ValidationError } from "@/lib/api";
+import { ValidationError, traducirMensajeBackend, normalizarProveedor } from "@/lib/api";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import {
@@ -83,24 +83,70 @@ export function ProveedorForm({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const direccionId = useId();
 
+  // Normalizar datos iniciales para soportar cualquier estructura de respuesta
+  const rawData = initialData as Record<string, unknown> | null | undefined;
+  const datosNormalizados = React.useMemo(() => {
+    return initialData ? normalizarProveedor(initialData) : null;
+  }, [
+    initialData?.id,
+    initialData?.ruc,
+    initialData?.razon_social,
+    rawData?.nombre,
+    rawData?.empresa,
+    rawData?.nombre_comercial,
+    rawData?.cedula,
+    initialData?.telefono,
+    rawData?.celular,
+    initialData?.email,
+    rawData?.correo,
+    initialData?.direccion,
+    initialData?.activo,
+    rawData?.estado,
+  ]);
+
   const {
     register,
     handleSubmit,
     setError,
     watch,
     setValue,
+    reset,
     formState: { errors },
   } = useForm<ProveedorFormData>({
     resolver: zodResolver(proveedorFormSchema),
     defaultValues: {
-      ruc: initialData?.ruc || "",
-      razon_social: initialData?.razon_social || "",
-      telefono: initialData?.telefono || "",
-      email: initialData?.email || "",
-      direccion: initialData?.direccion || "",
-      activo: initialData ? initialData.activo : true,
+      ruc: datosNormalizados?.ruc ?? "",
+      razon_social: datosNormalizados?.razon_social ?? "",
+      telefono: datosNormalizados?.telefono ?? "",
+      email: datosNormalizados?.email ?? "",
+      direccion: datosNormalizados?.direccion ?? "",
+      activo: datosNormalizados ? Boolean(datosNormalizados.activo) : true,
     },
+    values: datosNormalizados
+      ? {
+          ruc: datosNormalizados.ruc ?? "",
+          razon_social: datosNormalizados.razon_social ?? "",
+          telefono: datosNormalizados.telefono ?? "",
+          email: datosNormalizados.email ?? "",
+          direccion: datosNormalizados.direccion ?? "",
+          activo: Boolean(datosNormalizados.activo),
+        }
+      : undefined,
   });
+
+  // Sincronizar datos cuando initialData carga asíncronamente
+  React.useEffect(() => {
+    if (datosNormalizados) {
+      reset({
+        ruc: datosNormalizados.ruc ?? "",
+        razon_social: datosNormalizados.razon_social ?? "",
+        telefono: datosNormalizados.telefono ?? "",
+        email: datosNormalizados.email ?? "",
+        direccion: datosNormalizados.direccion ?? "",
+        activo: Boolean(datosNormalizados.activo),
+      });
+    }
+  }, [datosNormalizados, reset]);
 
   const activoWatcher = watch("activo");
 
@@ -120,6 +166,7 @@ export function ProveedorForm({
     } catch (error: unknown) {
       if (error instanceof ValidationError) {
         Object.entries(error.errors).forEach(([field, messages]) => {
+          const mensajeTraducido = traducirMensajeBackend(messages[0], field);
           if (
             field === "ruc" ||
             field === "razon_social" ||
@@ -130,14 +177,14 @@ export function ProveedorForm({
           ) {
             setError(field as keyof ProveedorFormData, {
               type: "server",
-              message: messages[0],
+              message: mensajeTraducido,
             });
           } else {
-            setGeneralError(messages[0]);
+            setGeneralError(mensajeTraducido);
           }
         });
       } else if (error instanceof Error) {
-        setGeneralError(error.message);
+        setGeneralError(traducirMensajeBackend(error.message));
       } else {
         setGeneralError("Ocurrió un error inesperado al procesar el proveedor.");
       }
@@ -336,10 +383,7 @@ export function ProveedorForm({
           className="w-full sm:w-auto text-xs gap-2 shadow-sm shadow-[#D17B00]/20"
         >
           {isBusy ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>{isEditing ? "Actualizando..." : "Registrando..."}</span>
-            </>
+            <span>{isEditing ? "Actualizando..." : "Registrando..."}</span>
           ) : (
             <>
               <Save className="w-4 h-4" />

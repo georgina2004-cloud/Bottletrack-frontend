@@ -52,6 +52,8 @@ interface ProductoConSugerencia {
   motivo: string;
 }
 
+const EMPTY_CATEGORIAS: Categoria[] = [];
+
 export default function NuevaVentaPOSPage() {
   const { token } = useAuth();
   const { formatMoneda } = useMoneda();
@@ -64,11 +66,15 @@ export default function NuevaVentaPOSPage() {
   const debouncedBusqueda = useDebounce(busqueda, 300);
 
   // SWR para catálogo de categorías (con caché de 1 hora)
-  const { data: categoriasData } = useSWR<Categoria[]>(
+  const { data: categoriasData } = useSWR<Categoria[] | { data: Categoria[] }>(
     token ? "/categorias?per_page=100" : null,
     { dedupingInterval: 3600000 }
   );
-  const todasCategorias = categoriasData || [];
+  const todasCategorias: Categoria[] = useMemo(() => {
+    if (!categoriasData) return EMPTY_CATEGORIAS;
+    if (Array.isArray(categoriasData)) return categoriasData;
+    return (categoriasData as { data?: Categoria[] }).data || EMPTY_CATEGORIAS;
+  }, [categoriasData]);
 
   // SWR para catálogo de productos (Punto de Venta)
   const productosEndpoint = token
@@ -134,6 +140,18 @@ export default function NuevaVentaPOSPage() {
   const [metodoPago, setMetodoPago] = useState<"efectivo" | "tarjeta">("efectivo");
   const [montoRecibido, setMontoRecibido] = useState<string>("");
 
+  // Clave serializada para ejecutar sugerencias solo cuando cambian los productos en el carrito
+  const carritoSignature = useMemo(() => {
+    return carrito
+      .map(
+        (item) =>
+          `${item.producto.id}_${item.presentacion_id || ""}_${
+            item.producto.categoria_id || item.producto.categoria?.id || ""
+          }`
+      )
+      .join(",");
+  }, [carrito]);
+
   // 2. Cálculo en tiempo real de sugerencias cruzadas según el contenido del carrito
   useEffect(() => {
     let isMounted = true;
@@ -141,7 +159,10 @@ export default function NuevaVentaPOSPage() {
     async function calcularSugerencias() {
       // Si el carrito está vacío o no hay categorías cargadas, no hay sugerencias
       if (!token || carrito.length === 0 || todasCategorias.length === 0) {
-        if (isMounted) setSugerencias([]);
+        if (isMounted) {
+          setSugerencias((prev) => (prev.length === 0 ? prev : []));
+          setIsLoadingSugerencias((prev) => (prev ? false : prev));
+        }
         return;
       }
 
@@ -188,7 +209,9 @@ export default function NuevaVentaPOSPage() {
         });
 
         if (categoriasObjetivoMap.size === 0) {
-          if (isMounted) setSugerencias([]);
+          if (isMounted) {
+            setSugerencias((prev) => (prev.length === 0 ? prev : []));
+          }
           return;
         }
 
@@ -251,10 +274,27 @@ export default function NuevaVentaPOSPage() {
         candidatas.sort((a, b) => b.producto.stock_actual - a.producto.stock_actual);
         const topSugerencias = candidatas.slice(0, 4);
 
-        setSugerencias(topSugerencias);
+        if (isMounted) {
+          setSugerencias((prev) => {
+            if (prev.length === 0 && topSugerencias.length === 0) return prev;
+            if (
+              prev.length === topSugerencias.length &&
+              prev.every(
+                (item, idx) =>
+                  item.producto.id === topSugerencias[idx].producto.id &&
+                  item.motivo === topSugerencias[idx].motivo
+              )
+            ) {
+              return prev;
+            }
+            return topSugerencias;
+          });
+        }
       } catch (err) {
         console.error("Error al calcular sugerencias dinámicas:", err);
-        if (isMounted) setSugerencias([]);
+        if (isMounted) {
+          setSugerencias((prev) => (prev.length === 0 ? prev : []));
+        }
       } finally {
         if (isMounted) {
           setIsLoadingSugerencias(false);
@@ -267,7 +307,7 @@ export default function NuevaVentaPOSPage() {
     return () => {
       isMounted = false;
     };
-  }, [carrito, token, todasCategorias]);
+  }, [carritoSignature, token, todasCategorias]);
 
   // =========================================================================
   // CÁLCULO DE STOCK BASE EN CARRITO
@@ -372,37 +412,24 @@ export default function NuevaVentaPOSPage() {
       setIsLoadingPresId(producto.id);
       const presentaciones = await obtenerPresentaciones(producto.id, token);
 
-      if (presentaciones.length > 1) {
+      if (presentaciones && presentaciones.length > 1) {
         setSelectorProducto({
           producto,
           presentaciones,
         });
-      } else if (presentaciones.length === 1) {
+      } else if (presentaciones && presentaciones.length === 1) {
         handleAgregarPresentacionAlCarrito(producto, presentaciones[0]);
       } else {
-        // Fallback si no tiene presentaciones configuradas aún: crear presentación Unidad en memoria
-        const presentacionDefault: Presentacion = {
-          id: producto.id,
-          producto_id: producto.id,
-          nombre: "Unidad",
-          unidades_equivalentes: 1,
-          precio_venta: producto.precio_venta,
-          es_default: true,
-        };
-        handleAgregarPresentacionAlCarrito(producto, presentacionDefault);
+        // El producto no tiene presentaciones en la base de datos
+        setErrorCobro(
+          `El producto "${producto.nombre}" no tiene presentaciones de venta registradas en el catálogo. Por favor edítalo para asignarle presentaciones.`
+        );
       }
     } catch (err) {
       console.error("Error al cargar presentaciones del producto:", err);
-      // Fallback
-      const presentacionDefault: Presentacion = {
-        id: producto.id,
-        producto_id: producto.id,
-        nombre: "Unidad",
-        unidades_equivalentes: 1,
-        precio_venta: producto.precio_venta,
-        es_default: true,
-      };
-      handleAgregarPresentacionAlCarrito(producto, presentacionDefault);
+      setErrorCobro(
+        `No fue posible consultar las presentaciones de venta para "${producto.nombre}".`
+      );
     } finally {
       setIsLoadingPresId(null);
     }
@@ -606,43 +633,20 @@ export default function NuevaVentaPOSPage() {
       <DashboardLayout>
         <div className="space-y-4">
           {/* ========================================================================= */}
-          {/* ENCABEZADO Y BREADCRUMB                                                   */}
+          {/* ENCABEZADO PRINCIPAL (SIN BREADCRUMB REDUNDANTE)                           */}
           {/* ========================================================================= */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <nav
-                aria-label="Breadcrumb"
-                className="flex items-center gap-1.5 text-xs text-slate-500 mb-1"
-              >
-                <Link
-                  href="/dashboard"
-                  className="hover:text-slate-900 transition-colors"
-                >
-                  Dashboard
-                </Link>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                <Link
-                  href="/ventas"
-                  className="hover:text-slate-900 transition-colors"
-                >
-                  Ventas
-                </Link>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                <span className="font-semibold text-brand">Barra de Venta</span>
-              </nav>
-
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-brand/10 text-brand">
-                  <ShoppingCart className="w-5 h-5" />
-                </div>
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#18181B] font-sans">
-                    Barra de Venta
-                  </h1>
-                  <p className="text-xs text-slate-500">
-                    Facturación ágil con presentaciones de venta múltiples y existencias en tiempo real.
-                  </p>
-                </div>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-brand/10 text-brand">
+                <ShoppingCart className="w-5 h-5" />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#18181B] font-sans">
+                  Punto de Venta (POS)
+                </h1>
+                <p className="text-xs text-slate-500">
+                  Busca productos por código o nombre para añadirlos al carrito.
+                </p>
               </div>
             </div>
 
@@ -1858,10 +1862,10 @@ export default function NuevaVentaPOSPage() {
                       onClick={handleImprimirFactura}
                       isLoading={isImprimiendoPdf}
                       disabled={isImprimiendoPdf}
-                      className="w-full text-xs font-semibold gap-1.5 shadow-sm"
+                      className="w-full sm:flex-1 min-w-0 text-xs font-semibold gap-1.5 shadow-sm justify-center cursor-pointer"
                     >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>{isImprimiendoPdf ? "Generando PDF..." : "Imprimir Factura"}</span>
+                      <Printer className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{isImprimiendoPdf ? "Generando PDF..." : "Imprimir Factura"}</span>
                     </Button>
 
                     <Button
@@ -1869,10 +1873,10 @@ export default function NuevaVentaPOSPage() {
                       variant="outline"
                       size="md"
                       onClick={handleNuevaVenta}
-                      className="w-full text-xs font-semibold gap-1.5"
+                      className="w-full sm:flex-1 min-w-0 text-xs font-semibold gap-1.5 justify-center cursor-pointer"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Nueva Venta</span>
+                      <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Nueva Venta</span>
                     </Button>
                   </div>
 

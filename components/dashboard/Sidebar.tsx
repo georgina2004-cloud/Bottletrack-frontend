@@ -24,6 +24,7 @@ import {
   ChevronRight,
   Warehouse,
   ClipboardCheck,
+  ClipboardList,
   UserCheck,
 } from "lucide-react";
 
@@ -140,6 +141,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         { label: "Movimientos de Inventario", href: "/reportes/movimientos-inventario" },
       ],
     },
+    { name: "Auditoría", href: "/auditoria", icon: ClipboardList, modulo: "auditoria" },
     { name: "Configuración", href: "/configuracion", icon: Settings, modulo: "configuracion" },
     { name: "Respaldos", href: "/respaldos", icon: Database, modulo: "respaldos" },
     { name: "Mi Perfil", href: "/perfil", icon: User, modulo: "dashboard" },

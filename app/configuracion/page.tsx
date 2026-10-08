@@ -845,28 +845,57 @@ export default function ConfiguracionPage() {
                   {/* Moneda Principal */}
                   <div className="p-4 bg-slate-50/70 border border-slate-100 rounded-2xl flex flex-col justify-between gap-3">
                     <div>
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                        Moneda Principal del Sistema
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+                          Moneda Principal del Sistema
+                        </label>
+                        {isEditing && configuracion?.moneda && (
+                          <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                            Fijada
+                          </span>
+                        )}
+                      </div>
                       {isEditing ? (
-                        <div className="grid grid-cols-3 gap-2 pt-1">
-                          {MONEDAS_DISPONIBLES.map((m) => (
-                            <button
-                              key={m.simbolo}
-                              type="button"
-                              onClick={() => setFormState({ ...formState, moneda: m.simbolo })}
-                              className={`
-                                p-2 rounded-xl text-xs font-bold transition-all border text-center cursor-pointer
-                                ${
-                                  formState.moneda === m.simbolo
-                                    ? "bg-brand text-white border-brand shadow-sm shadow-brand/25"
-                                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                                }
-                              `}
-                            >
-                              <span className="block text-sm">{m.simbolo}</span>
-                            </button>
-                          ))}
+                        <div className="space-y-1.5 pt-1">
+                          <div className="grid grid-cols-3 gap-2">
+                            {MONEDAS_DISPONIBLES.map((m) => {
+                              const isSelected = formState.moneda === m.simbolo;
+                              const monedaBloqueada = !!configuracion?.moneda;
+                              return (
+                                <button
+                                  key={m.simbolo}
+                                  type="button"
+                                  disabled={monedaBloqueada}
+                                  onClick={() => {
+                                    if (!monedaBloqueada) {
+                                      setFormState({ ...formState, moneda: m.simbolo });
+                                    }
+                                  }}
+                                  title={monedaBloqueada ? "La moneda no se puede modificar una vez configurada" : m.nombre}
+                                  className={`
+                                    p-2 rounded-xl text-xs font-bold transition-all border text-center
+                                    ${
+                                      monedaBloqueada
+                                        ? isSelected
+                                          ? "bg-slate-200 text-slate-800 border-slate-300 cursor-not-allowed"
+                                          : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                                        : isSelected
+                                        ? "bg-brand text-white border-brand shadow-sm shadow-brand/25 cursor-pointer"
+                                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 cursor-pointer"
+                                    }
+                                  `}
+                                >
+                                  <span className="block text-sm">{m.simbolo}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {configuracion?.moneda && (
+                            <p className="text-[11px] text-amber-700 font-medium pt-1 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 shrink-0" />
+                              <span>La moneda no se puede modificar una vez configurada.</span>
+                            </p>
+                          )}
                         </div>
                       ) : (
                         <span className="text-sm sm:text-base font-bold text-slate-900 block mt-1">

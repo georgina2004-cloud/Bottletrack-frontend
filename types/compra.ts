@@ -41,6 +41,7 @@ export interface Compra {
   numero_factura_proveedor: string | null;
   fecha: string;
   total: string | number;
+  estado_activa?: boolean;
   proveedor_id?: number;
   proveedor?: CompraProveedor;
   usuario?: CompraUsuario;

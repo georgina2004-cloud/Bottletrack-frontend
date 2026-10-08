@@ -16,7 +16,8 @@ export type ModuloSistema =
   | "usuarios"
   | "roles"
   | "configuracion"
-  | "respaldos";
+  | "respaldos"
+  | "auditoria";
 
 /**
  * Mapa estático conservado únicamente como REFERENCIA histórica.

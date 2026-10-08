@@ -114,9 +114,11 @@ export default function EditarProveedorPage({ params }: EditarProveedorPageProps
               <span className="font-semibold text-brand truncate max-w-xs">
                 {isLoading
                   ? "Cargando..."
-                  : proveedor
-                  ? `Editar: ${proveedor.razon_social}`
-                  : "Editar Proveedor"}
+                  : `Editar: ${
+                      proveedor?.razon_social ||
+                      (proveedor as unknown as { nombre?: string })?.nombre ||
+                      `Proveedor #${proveedor?.id || proveedorId}`
+                    }`}
               </span>
             </nav>
 

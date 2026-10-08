@@ -1010,20 +1010,20 @@ export default function NuevaCompraPage() {
                       type="button"
                       size="md"
                       onClick={handleNuevaCompra}
-                      className="w-full text-xs font-semibold gap-1.5"
+                      className="w-full sm:flex-1 min-w-0 text-xs font-semibold gap-1.5 justify-center cursor-pointer shadow-sm"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Registrar Otra Compra</span>
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Nueva Compra</span>
                     </Button>
 
-                    <Link href="/compras" className="w-full">
+                    <Link href="/compras" className="w-full sm:flex-1 min-w-0 block">
                       <Button
                         type="button"
                         variant="outline"
                         size="md"
-                        className="w-full text-xs font-semibold"
+                        className="w-full text-xs font-semibold gap-1.5 justify-center cursor-pointer"
                       >
-                        Ir al Listado de Compras
+                        <span className="truncate">Ver Compras</span>
                       </Button>
                     </Link>
                   </div>

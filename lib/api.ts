@@ -14,7 +14,13 @@ import {
   CategoriasPaginadasResponse,
   CategoriaFiltros,
   ApiValidationErrorResponse,
+  AlertasVencimientoResponse,
 } from "@/types/producto";
+import {
+  AuditLog,
+  AuditLogsPaginadosResponse,
+  AuditLogFiltros,
+} from "@/types/auditoria";
 import {
   Presentacion,
   CrearPresentacionPayload,
@@ -76,6 +82,101 @@ export { getStoredToken };
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
+export function traducirMensajeBackend(mensaje: string, campo?: string): string {
+  if (!mensaje || typeof mensaje !== "string") return mensaje;
+  const lower = mensaje.toLowerCase().trim();
+
+  const nombresCampos: Record<string, string> = {
+    ruc: "número RUC",
+    razon_social: "razón social / nombre comercial",
+    nombre: "nombre",
+    email: "correo electrónico",
+    telefono: "teléfono",
+    direccion: "dirección",
+    codigo_barras: "código de barras",
+    password: "contraseña",
+    current_password: "contraseña actual",
+    password_confirmation: "confirmación de contraseña",
+    categoria_id: "categoría",
+    precio_compra: "precio de compra",
+    precio_venta: "precio de venta",
+    stock_actual: "stock actual",
+    stock_minimo: "stock mínimo",
+    fecha_vencimiento: "fecha de vencimiento",
+    moneda_simbolo: "símbolo de moneda",
+  };
+
+  const nombreCampoEspanol = campo && nombresCampos[campo] ? nombresCampos[campo] : campo;
+
+  // Errores de unicidad (already been taken)
+  if (lower.includes("has already been taken") || lower.includes("ya ha sido tomado") || lower.includes("already exists")) {
+    if (campo === "ruc" || lower.includes("ruc")) {
+      return "Este número RUC ya ha sido registrado por otro proveedor.";
+    }
+    if (campo === "email" || lower.includes("email") || lower.includes("correo")) {
+      return "Este correo electrónico ya se encuentra registrado.";
+    }
+    if (campo === "codigo_barras" || lower.includes("codigo_barras") || lower.includes("barras")) {
+      return "Este código de barras ya se encuentra registrado.";
+    }
+    if (campo === "nombre" || lower.includes("nombre")) {
+      return "Este nombre ya se encuentra registrado.";
+    }
+    if (campo === "razon_social" || lower.includes("razon_social")) {
+      return "Esta razón social ya se encuentra registrada.";
+    }
+    return `El valor ingresado para ${nombreCampoEspanol || "este campo"} ya se encuentra registrado en el sistema.`;
+  }
+
+  // Errores de campo requerido (is required)
+  if (lower.includes("field is required") || lower.endsWith("is required.") || lower.endsWith("is required")) {
+    return nombreCampoEspanol ? `El campo ${nombreCampoEspanol} es obligatorio.` : "Este campo es obligatorio.";
+  }
+
+  // Errores de formato de email
+  if (lower.includes("must be a valid email address") || lower.includes("must be a valid email")) {
+    return "Ingresa un correo electrónico válido.";
+  }
+
+  // Errores de longitud mínima/máxima
+  if (lower.includes("must be at least")) {
+    const match = mensaje.match(/\d+/);
+    const num = match ? match[0] : "";
+    return `Debe tener al menos ${num} caracteres.`;
+  }
+
+  if (lower.includes("must not be greater than")) {
+    const match = mensaje.match(/\d+/);
+    const num = match ? match[0] : "";
+    return `No puede exceder los ${num} caracteres.`;
+  }
+
+  // Errores de tipo numérico
+  if (lower.includes("must be a number") || lower.includes("must be numeric")) {
+    return "Debe ser un valor numérico.";
+  }
+
+  if (lower.includes("must be an integer")) {
+    return "Debe ser un número entero.";
+  }
+
+  // Errores de selección inválida
+  if (lower.includes("selected") && lower.includes("is invalid")) {
+    return `La opción seleccionada ${nombreCampoEspanol ? `para ${nombreCampoEspanol}` : ""} no es válida.`;
+  }
+
+  // Contraseña incorrecta
+  if (lower.includes("provided password does not match") || lower.includes("current password is incorrect")) {
+    return "La contraseña actual no coincide con nuestros registros.";
+  }
+
+  if (lower.includes("unauthenticated") || lower.includes("not authenticated")) {
+    return "Tu sesión ha expirado o no estás autenticado.";
+  }
+
+  return mensaje;
+}
+
 /**
  * Clase de error personalizada para manejar errores de validación HTTP 422 de Laravel
  */
@@ -84,9 +185,18 @@ export class ValidationError extends Error {
   public status: number;
 
   constructor(message: string, errors: Record<string, string[]> = {}, status = 422) {
-    super(message);
+    const translatedMessage = traducirMensajeBackend(message);
+    super(translatedMessage);
     this.name = "ValidationError";
-    this.errors = errors;
+
+    const translatedErrors: Record<string, string[]> = {};
+    for (const [field, messages] of Object.entries(errors)) {
+      translatedErrors[field] = Array.isArray(messages)
+        ? messages.map((m) => traducirMensajeBackend(m, field))
+        : [traducirMensajeBackend(String(messages), field)];
+    }
+
+    this.errors = translatedErrors;
     this.status = status;
   }
 }
@@ -718,6 +828,106 @@ export async function eliminarCategoria(
 }
 
 /**
+ * Normaliza cualquier estructura o nomenclatura de campos de Proveedor que retorne el backend Laravel
+ */
+export function normalizarProveedor(raw: unknown): Proveedor {
+  if (!raw || typeof raw !== "object") {
+    return {
+      id: 0,
+      ruc: "",
+      razon_social: "",
+      telefono: null,
+      email: null,
+      direccion: null,
+      activo: true,
+    };
+  }
+
+  // Desenvolver cualquier envoltura anidada (ej: { proveedor: { ... } }, { data: { proveedor: { ... } } }, { data: { ... } }, { result: { ... } })
+  let item: Record<string, unknown> = raw as Record<string, unknown>;
+  let depth = 0;
+  while (depth < 5 && item && typeof item === "object") {
+    if (item.proveedor && typeof item.proveedor === "object" && !Array.isArray(item.proveedor)) {
+      item = item.proveedor as Record<string, unknown>;
+    } else if (item.data && typeof item.data === "object" && !Array.isArray(item.data)) {
+      item = item.data as Record<string, unknown>;
+    } else if (item.result && typeof item.result === "object" && !Array.isArray(item.result)) {
+      item = item.result as Record<string, unknown>;
+    } else {
+      break;
+    }
+    depth++;
+  }
+
+  const idVal = item.id ?? item.proveedor_id ?? item.id_proveedor ?? item.codigo ?? item.code ?? 0;
+  const rucVal =
+    item.ruc ??
+    item.numero_ruc ??
+    item.cedula ??
+    item.identificacion ??
+    item.identificacion_tributaria ??
+    item.nit ??
+    item.cuit ??
+    item.dni ??
+    item.tax_id ??
+    "";
+  const razonSocialVal =
+    item.razon_social ??
+    item.nombre ??
+    item.nombre_comercial ??
+    item.nombre_proveedor ??
+    item.empresa ??
+    item.name ??
+    item.company_name ??
+    item.razonSocial ??
+    item.business_name ??
+    "";
+  const telefonoVal =
+    item.telefono ??
+    item.celular ??
+    item.telefono_proveedor ??
+    item.telefono_contacto ??
+    item.phone ??
+    item.phone_number ??
+    item.tel ??
+    null;
+  const emailVal =
+    item.email ??
+    item.correo ??
+    item.correo_proveedor ??
+    item.correo_electronico ??
+    item.mail ??
+    null;
+  const direccionVal =
+    item.direccion ??
+    item.direccion_proveedor ??
+    item.direccion_fisica ??
+    item.ubicacion ??
+    item.address ??
+    null;
+  const activoVal =
+    item.activo !== undefined
+      ? Boolean(item.activo)
+      : item.estado !== undefined
+      ? item.estado === 1 || item.estado === "activo" || item.estado === "ACTIVO" || item.estado === true
+      : item.is_active !== undefined
+      ? Boolean(item.is_active)
+      : true;
+
+  return {
+    id: Number(idVal) || 0,
+    ruc: String(rucVal ?? "").trim(),
+    razon_social: String(razonSocialVal ?? "").trim(),
+    telefono: telefonoVal !== null && telefonoVal !== undefined ? String(telefonoVal).trim() : null,
+    email: emailVal !== null && emailVal !== undefined ? String(emailVal).trim() : null,
+    direccion: direccionVal !== null && direccionVal !== undefined ? String(direccionVal).trim() : null,
+    activo: Boolean(activoVal),
+    created_at: item.created_at ? String(item.created_at) : undefined,
+    updated_at: item.updated_at ? String(item.updated_at) : undefined,
+  };
+}
+
+/**
  * Consulta el listado paginado de proveedores desde el backend Laravel.
  * Endpoint: GET /api/proveedores
  * Query params: busqueda, page
@@ -737,7 +947,7 @@ export async function obtenerProveedores(
   }
 
   const url = `${API_BASE_URL}/proveedores${
-    queryParams.toString() ? `?${queryParams.toString()}` : ""
+    queryParams.toString() ? `?${queryParams.toString}` : ""
   }`;
 
   const response = await fetch(url, {
@@ -755,7 +965,26 @@ export async function obtenerProveedores(
   }
 
   const data = await response.json();
-  return data as ProveedoresPaginadosResponse;
+  if (data && Array.isArray(data.data)) {
+    return {
+      data: data.data.map(normalizarProveedor),
+      current_page: data.current_page || 1,
+      last_page: data.last_page || 1,
+      total: data.total ?? data.data.length,
+      per_page: data.per_page,
+      from: data.from,
+      to: data.to,
+    };
+  }
+  if (Array.isArray(data)) {
+    return {
+      data: data.map(normalizarProveedor),
+      current_page: 1,
+      last_page: 1,
+      total: data.length,
+    };
+  }
+  return { data: [], current_page: 1, last_page: 1, total: 0 };
 }
 
 /**
@@ -783,7 +1012,7 @@ export async function obtenerProveedorPorId(
   }
 
   const data = await response.json();
-  return (data.data || data) as Proveedor;
+  return normalizarProveedor(data);
 }
 
 /**
@@ -794,10 +1023,16 @@ export async function crearProveedor(
   payload: ProveedorPayload,
   token?: string | null
 ): Promise<Proveedor> {
+  const bodyData = {
+    ...payload,
+    nombre: payload.razon_social,
+    nombre_comercial: payload.razon_social,
+  };
+
   const response = await fetch(`${API_BASE_URL}/proveedores`, {
     method: "POST",
     headers: getAuthHeaders(token),
-    body: JSON.stringify(payload),
+    body: JSON.stringify(bodyData),
   });
 
   const data = await response.json().catch(() => null);
@@ -815,7 +1050,7 @@ export async function crearProveedor(
     );
   }
 
-  return (data?.data || data) as Proveedor;
+  return normalizarProveedor(data);
 }
 
 /**
@@ -827,10 +1062,16 @@ export async function actualizarProveedor(
   payload: ProveedorPayload,
   token?: string | null
 ): Promise<Proveedor> {
+  const bodyData = {
+    ...payload,
+    nombre: payload.razon_social,
+    nombre_comercial: payload.razon_social,
+  };
+
   const response = await fetch(`${API_BASE_URL}/proveedores/${id}`, {
     method: "PUT",
     headers: getAuthHeaders(token),
-    body: JSON.stringify(payload),
+    body: JSON.stringify(bodyData),
   });
 
   const data = await response.json().catch(() => null);
@@ -848,7 +1089,7 @@ export async function actualizarProveedor(
     );
   }
 
-  return (data?.data || data) as Proveedor;
+  return normalizarProveedor(data);
 }
 
 /**
@@ -2401,5 +2642,156 @@ export async function restaurarRespaldo(
     message: data?.message || "Base de datos restaurada correctamente.",
   };
 }
+
+// =============================================================================
+// MÓDULO DE AUDITORÍA (AUDIT LOGS)
+// =============================================================================
+
+/**
+ * Consulta el historial paginado de auditoría del sistema.
+ * Endpoint: GET /api/admin/audit-logs?usuario_id=&desde=&hasta=&modulo=&page=
+ */
+export async function obtenerAuditLogs(
+  filtros: AuditLogFiltros = {},
+  token?: string | null
+): Promise<AuditLogsPaginadosResponse> {
+  const authToken = token || getStoredToken();
+  if (!authToken) {
+    throw new Error("No hay un token de autenticación disponible.");
+  }
+
+  const queryParams = new URLSearchParams();
+  if (filtros.usuario_id) queryParams.append("usuario_id", String(filtros.usuario_id));
+  if (filtros.desde && filtros.desde.trim()) queryParams.append("desde", filtros.desde.trim());
+  if (filtros.hasta && filtros.hasta.trim()) queryParams.append("hasta", filtros.hasta.trim());
+  if (filtros.modulo && filtros.modulo.trim()) queryParams.append("modulo", filtros.modulo.trim());
+  if (filtros.page && filtros.page > 1) queryParams.append("page", String(filtros.page));
+
+  const queryString = queryParams.toString();
+  const url = `${API_BASE_URL}/admin/audit-logs${queryString ? `?${queryString}` : ""}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: getAuthHeaders(authToken),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      errorData?.message || `Error al obtener registros de auditoría (${response.status})`
+    );
+  }
+
+  const data = await response.json();
+  return data as AuditLogsPaginadosResponse;
+}
+
+// =============================================================================
+// ALERTAS DE VENCIMIENTO DE PRODUCTOS
+// =============================================================================
+
+/**
+ * Obtiene el listado de productos vencidos y por vencer dentro del rango de días indicado.
+ * Endpoint: GET /api/productos/alertas-vencimiento?dias=30
+ */
+export async function obtenerAlertasVencimiento(
+  dias: number = 30,
+  token?: string | null
+): Promise<AlertasVencimientoResponse> {
+  const authToken = token || getStoredToken();
+  if (!authToken) {
+    throw new Error("No hay un token de autenticación disponible.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/productos/alertas-vencimiento?dias=${dias}`,
+    {
+      method: "GET",
+      headers: getAuthHeaders(authToken),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      errorData?.message || `Error al consultar alertas de vencimiento (${response.status})`
+    );
+  }
+
+  const data = await response.json();
+  return {
+    vencidos: data?.vencidos || [],
+    por_vencer: data?.por_vencer || [],
+  };
+}
+
+// =============================================================================
+// PERFIL DE USUARIO
+// =============================================================================
+
+/**
+ * Obtiene los datos del perfil del usuario autenticado en sesión.
+ * Endpoint: GET /api/perfil
+ */
+export async function obtenerPerfilUsuario(
+  token?: string | null
+): Promise<import("@/types/auth").User> {
+  const authToken = token || getStoredToken();
+  if (!authToken) {
+    throw new Error("No hay un token de autenticación disponible.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/perfil`, {
+    method: "GET",
+    headers: getAuthHeaders(authToken),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      errorData?.message || `Error al obtener datos del perfil (${response.status})`
+    );
+  }
+
+  const data = await response.json();
+  return (data.user || data.data || data) as import("@/types/auth").User;
+}
+
+// =============================================================================
+// ANULACIÓN DE COMPRAS
+// =============================================================================
+
+/**
+ * Anula una compra registrada y revierte el stock ingresado al inventario.
+ * Endpoint: POST /api/compras/{id}/anular
+ */
+export async function anularCompra(
+  id: number | string,
+  token?: string | null
+): Promise<{ message: string; compra?: Compra }> {
+  const authToken = token || getStoredToken();
+  if (!authToken) {
+    throw new Error("No hay un token de autenticación disponible.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/compras/${id}/anular`, {
+    method: "POST",
+    headers: getAuthHeaders(authToken),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message || `Error al anular la compra (${response.status})`
+    );
+  }
+
+  return data || { message: "Compra anulada correctamente." };
+}
+
 
 

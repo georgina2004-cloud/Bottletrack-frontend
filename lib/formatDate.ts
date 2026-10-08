@@ -94,3 +94,57 @@ export function formatDateShort(dateStr?: string | null): string {
     return String(dateStr);
   }
 }
+
+/**
+ * Calcula la diferencia en días entre la fecha dada ('YYYY-MM-DD') y la fecha actual en hora local,
+ * evitando desfases de zona horaria (sin new Date(string) directo).
+ * Retorna:
+ *  - Positivo (>0): Días restantes para vencer
+ *  - 0: Vence hoy
+ *  - Negativo (<0): Días transcurridos desde que venció
+ *  - null: Si la fecha es inválida o no existe
+ */
+export function diasParaVencer(fechaStr?: string | null): number | null {
+  if (!fechaStr) return null;
+
+  const match = String(fechaStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10) - 1;
+  const day = parseInt(match[3], 10);
+
+  // Fecha objetivo en hora local (00:00:00)
+  const target = new Date(year, month, day, 0, 0, 0, 0);
+
+  // Fecha actual en hora local (00:00:00)
+  const now = new Date();
+  const hoy = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+  const diffMs = target.getTime() - hoy.getTime();
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Genera el texto legible y descriptivo del vencimiento de un producto.
+ * Salidas: "Vencido hace N días", "Vence hoy", "Vence mañana", "Vence en N días".
+ */
+export function textoVencimiento(fechaStr?: string | null): string | null {
+  const dias = diasParaVencer(fechaStr);
+  if (dias === null) return null;
+
+  if (dias < 0) {
+    const absDias = Math.abs(dias);
+    return absDias === 1 ? "Vencido hace 1 día" : `Vencido hace ${absDias} días`;
+  }
+
+  if (dias === 0) {
+    return "Vence hoy";
+  }
+
+  if (dias === 1) {
+    return "Vence mañana";
+  }
+
+  return `Vence en ${dias} días`;
+}

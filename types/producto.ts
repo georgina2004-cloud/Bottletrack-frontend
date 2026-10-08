@@ -51,6 +51,7 @@ export interface Producto {
   ubicacion: string | null;
   imagen_url: string | null; // URL absoluta de la imagen o null
   activo: boolean;
+  fecha_vencimiento?: string | null;
   presentaciones?: Presentacion[];
   created_at?: string;
   updated_at?: string;
@@ -70,6 +71,7 @@ export interface ProductoFiltros {
   busqueda?: string;
   categoria_id?: number | string;
   page?: number;
+  solo_alertas_vencimiento?: boolean;
 }
 
 export interface ProductoPayload {
@@ -84,9 +86,25 @@ export interface ProductoPayload {
   stock_maximo?: number | null;
   presentacion_ml?: string | null;
   ubicacion?: string | null;
+  fecha_vencimiento?: string | null;
+}
+
+export interface ProductoAlertaVencimiento {
+  id: number;
+  nombre: string;
+  fecha_vencimiento: string;
+  dias_restantes?: number;
+  stock_actual?: number;
+  categoria?: { id: number; nombre: string } | null;
+}
+
+export interface AlertasVencimientoResponse {
+  vencidos: ProductoAlertaVencimiento[];
+  por_vencer: ProductoAlertaVencimiento[];
 }
 
 export interface ApiValidationErrorResponse {
   message: string;
   errors?: Record<string, string[]>;
 }
+

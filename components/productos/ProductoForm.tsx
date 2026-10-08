@@ -33,6 +33,7 @@ import {
   Boxes,
   Droplets,
   Upload,
+  Calendar,
 } from "lucide-react";
 import { PresentacionesManager } from "@/components/productos/PresentacionesManager";
 
@@ -107,6 +108,12 @@ export const productoFormSchema = z.object({
     .optional()
     .nullable()
     .transform((val) => (val && val.length > 0 ? val : null)),
+  fecha_vencimiento: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((val) => (val && val.length > 0 ? val : null)),
 });
 
 export type ProductoFormData = z.input<typeof productoFormSchema>;
@@ -175,6 +182,7 @@ export function ProductoForm({
       stock_maximo: null,
       presentacion_ml: "",
       ubicacion: "",
+      fecha_vencimiento: "",
     },
   });
 
@@ -245,6 +253,9 @@ export function ProductoForm({
         stock_maximo: initialData.stock_maximo ?? null,
         presentacion_ml: initialData.presentacion_ml || "",
         ubicacion: initialData.ubicacion || "",
+        fecha_vencimiento: initialData.fecha_vencimiento
+          ? initialData.fecha_vencimiento.slice(0, 10)
+          : "",
       });
       setUnidadVolumen("ml");
       // Limpiar imagen seleccionada localmente al recargar datos iniciales
@@ -411,6 +422,7 @@ export function ProductoForm({
           return String(numVal);
         })(),
         ubicacion: data.ubicacion ? data.ubicacion.trim() : null,
+        fecha_vencimiento: data.fecha_vencimiento ? data.fecha_vencimiento.trim() : null,
       };
 
       // Construir FormData con todos los campos del producto
@@ -430,6 +442,7 @@ export function ProductoForm({
       }
       if (payload.presentacion_ml) formData.append("presentacion_ml", payload.presentacion_ml);
       if (payload.ubicacion) formData.append("ubicacion", payload.ubicacion);
+      formData.append("fecha_vencimiento", payload.fecha_vencimiento || "");
 
       // Imagen: agregar archivo si se seleccionó uno nuevo
       if (imagenFile) {
@@ -1013,14 +1026,26 @@ export function ProductoForm({
           </div>
 
           {/* Ubicación Física */}
-          <div className="sm:col-span-3">
+          <div className="sm:col-span-2">
             <Input
               label="Ubicación Física en Bodega / Tienda"
               placeholder="Ej: Estantería Central B-04 / Vitrina Principal"
               leftIcon={<MapPin className="w-4 h-4" />}
               error={errors.ubicacion?.message}
-              helperText="Referencia rápida para encontrar el producto en el almacén"
+              helperText="Referencia rápida para encontrar el producto"
               {...register("ubicacion")}
+            />
+          </div>
+
+          {/* Fecha de Vencimiento */}
+          <div className="sm:col-span-1">
+            <Input
+              label="Fecha de Vencimiento (Opcional)"
+              type="date"
+              leftIcon={<Calendar className="w-4 h-4" />}
+              error={errors.fecha_vencimiento?.message}
+              helperText="Fecha de caducidad del lote"
+              {...register("fecha_vencimiento")}
             />
           </div>
         </div>

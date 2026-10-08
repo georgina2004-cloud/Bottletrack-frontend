@@ -40,34 +40,33 @@ export function MetricCard({ metric, isLoading = false }: MetricCardProps) {
 
   const getIconTheme = () => {
     if (metric.isAlert || metric.id === "alertas-stock" || metric.iconName === "alert-triangle") {
-      return "bg-amber-50 text-amber-600 border border-amber-200/80 group-hover:bg-amber-600 group-hover:text-white";
+      return "bg-amber-50 text-amber-600 border border-amber-200/80";
     }
     if (metric.id === "ventas-dia" || metric.iconName === "dollar") {
-      return "bg-emerald-50 text-emerald-600 border border-emerald-200/70 group-hover:bg-emerald-600 group-hover:text-white";
+      return "bg-emerald-50 text-emerald-600 border border-emerald-200/70";
     }
     if (metric.id === "ventas-mes" || metric.iconName === "calendar-dollar") {
-      return "bg-emerald-50 text-emerald-700 border border-emerald-200/70 group-hover:bg-emerald-700 group-hover:text-white";
+      return "bg-emerald-50 text-emerald-700 border border-emerald-200/70";
     }
     if (metric.id === "productos-inventario" || metric.iconName === "package") {
-      return "bg-indigo-50 text-indigo-600 border border-indigo-200/70 group-hover:bg-indigo-600 group-hover:text-white";
+      return "bg-indigo-50 text-indigo-600 border border-indigo-200/70";
     }
     if (metric.id === "compras-mes" || metric.iconName === "shopping-cart") {
-      return "bg-orange-50 text-orange-600 border border-orange-200/70 group-hover:bg-orange-600 group-hover:text-white";
+      return "bg-orange-50 text-orange-600 border border-orange-200/70";
     }
     if (metric.id === "utilidad-estimada" || metric.iconName === "trending-up") {
-      return "bg-teal-50 text-teal-700 border border-teal-200/70 group-hover:bg-teal-700 group-hover:text-white";
+      return "bg-teal-50 text-teal-700 border border-teal-200/70";
     }
-    return "bg-slate-100 text-slate-700 border border-slate-200 group-hover:bg-slate-800 group-hover:text-white";
+    return "bg-slate-100 text-slate-700 border border-slate-200";
   };
 
   return (
     <div
       className={`
-        relative bg-white rounded-2xl p-4 sm:p-4.5 border transition-all duration-200
-        hover:shadow-md hover:border-slate-300 group flex flex-col justify-between
+        relative bg-white rounded-2xl p-4 sm:p-4.5 border flex flex-col justify-between
         ${
           metric.isAlert
-            ? "border-amber-200/80 bg-linear-to-br from-white via-white to-amber-50/30"
+            ? "border-amber-200/80 bg-linear-to-br from-white via-white to-amber-50/30 shadow-xs"
             : "border-slate-200/80 shadow-xs"
         }
       `}

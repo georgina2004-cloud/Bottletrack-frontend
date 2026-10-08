@@ -41,6 +41,7 @@ import { LowStockAlertsList } from "@/components/dashboard/LowStockAlertsList";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/context/AuthContext";
 import { usePermisos } from "@/hooks/usePermisos";
+import { useAlertas } from "@/hooks/useAlertas";
 import {
   obtenerResumenInventario,
   obtenerResumenVentasCompras,
@@ -52,7 +53,7 @@ import {
   PuntoTendencia,
   MetricItem,
 } from "@/types/dashboard";
-import { Plus, AlertTriangle, X } from "lucide-react";
+import { Plus, AlertTriangle, X, Clock } from "lucide-react";
 import { useMoneda } from "@/lib/currency";
 
 function DashboardContent() {
@@ -209,6 +210,11 @@ function DashboardContent() {
     };
   }, [periodoTendencia, token]);
 
+  // =========================================================================
+  // 4. ESTADO DE ALERTAS DE VENCIMIENTO (Hook compartido useAlertas)
+  // =========================================================================
+  const { vencidos, porVencer, isLoading: isLoadingAlertas } = useAlertas();
+
 
 
   // ===========================================================================
@@ -332,6 +338,44 @@ function DashboardContent() {
               )}
             </div>
           </div>
+
+          {/* ========================================================================= */}
+          {/* ALERTA DE VENCIMIENTO (Sincronizado con useAlertas y la campana)         */}
+          {/* ========================================================================= */}
+          {(!isLoadingAlertas && (vencidos.length > 0 || porVencer.length > 0)) && (
+            <div className="bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-transparent border border-amber-200/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Control de Vencimiento de Licores y Productos
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Hay{" "}
+                    {vencidos.length > 0 && (
+                      <span className="font-bold text-rose-700">
+                        {vencidos.length} {vencidos.length === 1 ? "producto vencido" : "productos vencidos"}
+                      </span>
+                    )}
+                    {vencidos.length > 0 && porVencer.length > 0 && " y "}
+                    {porVencer.length > 0 && (
+                      <span className="font-bold text-amber-700">
+                        {porVencer.length} {porVencer.length === 1 ? "por vencer en 30 días" : "por vencer en los próximos 30 días"}
+                      </span>
+                    )}
+                    .
+                  </p>
+                </div>
+              </div>
+              <Link href="/productos?alerta_vencimiento=1">
+                <Button size="sm" variant="outline" className="text-xs bg-white border-amber-300 text-amber-900 hover:bg-amber-50 whitespace-nowrap shadow-2xs">
+                  Ver productos con alerta →
+                </Button>
+              </Link>
+            </div>
+          )}
 
           {/* ========================================================================= */}
           {/* SECCIÓN 1: 2 TARJETAS DE MÉTRICAS SUPERIORES                              */}

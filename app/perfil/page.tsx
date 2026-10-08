@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/Button";
 import {
   actualizarPerfilUsuario,
+  obtenerPerfilUsuario,
   ValidationError,
   ActualizarPerfilPayload,
 } from "@/lib/api";
@@ -42,13 +43,30 @@ export default function PerfilPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
-  // Sincronizar datos iniciales del usuario
+  // Sincronizar datos iniciales del usuario desde GET /api/perfil o AuthContext
   useEffect(() => {
-    if (user) {
-      setNombre(user.name || "");
-      setEmail(user.email || "");
+    let isMounted = true;
+    async function cargarPerfil() {
+      if (!token) return;
+      try {
+        const freshUser = await obtenerPerfilUsuario(token);
+        if (isMounted && freshUser) {
+          setNombre(freshUser.name || "");
+          setEmail(freshUser.email || "");
+          updateUser(freshUser);
+        }
+      } catch {
+        if (isMounted && user) {
+          setNombre(user.name || "");
+          setEmail(user.email || "");
+        }
+      }
     }
-  }, [user]);
+    cargarPerfil();
+    return () => {
+      isMounted = false;
+    };
+  }, [token]);
 
   // Manejador del guardado de perfil y/o contraseña
   const handleGuardarPerfil = async (e: React.FormEvent) => {

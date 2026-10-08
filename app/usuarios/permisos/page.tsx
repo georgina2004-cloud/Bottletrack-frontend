@@ -433,7 +433,7 @@ export default function PermisosPage() {
                         Otorgar Permisos por Rol
                       </h1>
                       <p className="text-xs text-slate-500">
-                        Configuración granular de privilegios y control de acceso (RBAC) por rol.
+                        Configuración granular de privilegios y Control de Roles y Permisos por rol.
                       </p>
                     </div>
                   </div>
