@@ -9,9 +9,11 @@ import { Producto, ProductoPayload, Categoria } from "@/types/producto";
 import {
   obtenerCategorias,
   ValidationError,
-  buscarProductoPorCodigo,
 } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useBarcodeLookup } from "@/hooks/useBarcodeLookup";
+import { buscarCategoriaPorSugerencia } from "@/lib/categoriaMatch";
+import { EstadoBarcode } from "@/components/productos/EstadoBarcode";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import {
@@ -26,8 +28,6 @@ import {
   TrendingUp,
   Tag,
   Loader2,
-  AlertCircle,
-  Edit3,
   ImagePlus,
   Trash2,
   Boxes,
@@ -136,10 +136,13 @@ export function ProductoForm({
   const [isLoadingCategorias, setIsLoadingCategorias] = useState<boolean>(true);
   const [generalError, setGeneralError] = useState<string | null>(null);
 
-  // Estados para búsqueda por código de barras (pistola lectora / USB)
-  const [isSearchingCodigo, setIsSearchingCodigo] = useState<boolean>(false);
-  const [productoExistente, setProductoExistente] = useState<Producto | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  // Hook de búsqueda y autocompletado por código de barras
+  const {
+    estado: estadoBarcode,
+    productoLocal: productoLocalBarcode,
+    buscar: buscarBarcode,
+    reset: resetBarcode,
+  } = useBarcodeLookup(token);
 
   // ─── Estados para imagen ────────────────────────────────────────────────────
   /** Archivo seleccionado por el usuario (nuevo, aún no subido) */
@@ -358,40 +361,43 @@ export function ProductoForm({
     }
   };
 
-  // Manejo de lectura de código de barras / QR con pistola lectora USB o teclado
-  const handleCodigoKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+  // Manejo de lectura de código de barras / pistola lectora USB con autocompletado
+  const manejarCodigoKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
     if (isEditing) return;
 
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const codigo = (e.currentTarget.value || "").trim();
+    const codigo = e.currentTarget.value.trim();
+    if (!codigo) return;
 
-      if (!codigo) {
-        setFocus("nombre");
-        return;
+    const data = await buscarBarcode(codigo);
+
+    if (data?.found) {
+      // Completar SOLO campos vacíos (nunca pisar lo que el usuario ya escribió)
+      const currentNombre = getValues("nombre");
+      const currentMarca = getValues("marca");
+      const currentCategoriaId = getValues("categoria_id");
+
+      if (!currentNombre?.trim() && data.nombre) {
+        setValue("nombre", data.nombre, { shouldDirty: true, shouldValidate: true });
       }
-
-      setProductoExistente(null);
-      setSearchError(null);
-      setIsSearchingCodigo(true);
-
-      try {
-        const prod = await buscarProductoPorCodigo(codigo, token);
-        if (prod) {
-          setProductoExistente(prod);
-        } else {
-          setProductoExistente(null);
-          setSearchError(null);
-          setFocus("nombre");
+      if (!currentMarca?.trim() && data.marca) {
+        setValue("marca", data.marca, { shouldDirty: true });
+      }
+      const hasCategoriaId = Boolean(
+        currentCategoriaId &&
+          !isNaN(Number(currentCategoriaId)) &&
+          Number(currentCategoriaId) > 0
+      );
+      if (!hasCategoriaId && data.categoria_sugerida) {
+        const match = buscarCategoriaPorSugerencia(data.categoria_sugerida, categorias);
+        if (match) {
+          setValue("categoria_id", match.id, { shouldDirty: true, shouldValidate: true });
         }
-      } catch (err: unknown) {
-        console.error("Error al consultar código de barras:", err);
-        setProductoExistente(null);
-        setSearchError("No se pudo verificar el código, continúa manualmente.");
-        setFocus("nombre");
-      } finally {
-        setIsSearchingCodigo(false);
       }
+      setFocus("precio_compra");
+    } else if (!data?.existe_local) {
+      setFocus("nombre");
     }
   };
 
@@ -500,8 +506,6 @@ export function ProductoForm({
     );
   }
 
-  const codigoRegister = register("codigo_barras");
-
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
       {/* Banner de error general del servidor */}
@@ -515,84 +519,6 @@ export function ProductoForm({
             <p className="font-semibold text-rose-900">Atención requerida</p>
             <p className="text-rose-700 text-xs mt-0.5">{generalError}</p>
           </div>
-        </div>
-      )}
-
-      {/* Banner de alerta: Producto ya registrado detectado por escáner de código */}
-      {productoExistente && (
-        <div
-          role="alert"
-          className="p-4 sm:p-5 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-amber-950 shadow-xs animate-in fade-in slide-in-from-top-2 duration-200"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-amber-100/90 text-amber-800 rounded-xl shrink-0 mt-0.5">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold text-sm text-amber-950">
-                    Este producto ya está registrado
-                  </p>
-                  {productoExistente.codigo_barras && (
-                    <span className="text-xs px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900 font-mono font-medium">
-                      {productoExistente.codigo_barras}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs font-semibold text-amber-900">
-                  {productoExistente.nombre}
-                  {productoExistente.categoria?.nombre
-                    ? ` • Categoría: ${productoExistente.categoria.nombre}`
-                    : ""}
-                </p>
-                <p className="text-xs text-amber-800/80">
-                  Para evitar duplicados accidentales, no se completó el formulario con estos datos. Si deseas actualizarlo, puedes editarlo directamente.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setProductoExistente(null)}
-              className="text-amber-700 hover:text-amber-900 p-1.5 rounded-lg hover:bg-amber-200/50 transition-colors shrink-0 cursor-pointer"
-              title="Cerrar aviso"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="mt-3.5 pt-3 border-t border-amber-200/70 flex items-center justify-end">
-            <Link href={`/productos/${productoExistente.id}/editar`}>
-              <Button
-                type="button"
-                size="sm"
-                className="text-xs font-semibold gap-1.5 shadow-xs"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Ir a editar este producto</span>
-              </Button>
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* Banner de aviso: Error de conexión o servidor al consultar código */}
-      {searchError && (
-        <div
-          role="status"
-          className="p-3.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs flex items-center justify-between gap-3 shadow-2xs animate-in fade-in duration-150"
-        >
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
-            <span>{searchError}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSearchError(null)}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors shrink-0 cursor-pointer"
-            title="Cerrar aviso"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
         </div>
       )}
 
@@ -690,28 +616,18 @@ export function ProductoForm({
               autoFocus={!isEditing}
               error={errors.codigo_barras?.message}
               helperText={
-                isSearchingCodigo
-                  ? "Buscando producto en el catálogo..."
-                  : !isEditing
-                  ? "Escanea con la pistola o presiona Enter para verificar duplicados"
+                !isEditing
+                  ? "Escanea con la pistola o presiona Enter para autocompletar"
                   : "Código numérico impreso en la botella"
               }
-              className={isSearchingCodigo ? "pr-28" : ""}
-              rightElement={
-                isSearchingCodigo ? (
-                  <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-brand bg-brand/5 rounded-md mr-1 border border-brand/20">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span className="hidden sm:inline text-[11px]">Buscando...</span>
-                  </div>
-                ) : undefined
-              }
-              {...codigoRegister}
-              onKeyDown={handleCodigoKeyDown}
-              onChange={(e) => {
-                codigoRegister.onChange(e);
-                if (productoExistente) setProductoExistente(null);
-                if (searchError) setSearchError(null);
-              }}
+              {...register("codigo_barras", {
+                onChange: () => resetBarcode(),
+              })}
+              onKeyDown={manejarCodigoKeyDown}
+            />
+            <EstadoBarcode
+              estado={estadoBarcode}
+              productoLocal={productoLocalBarcode}
             />
           </div>
 

@@ -4,6 +4,7 @@ import {
   PuntoTendencia,
   VentaPorCategoria,
 } from "@/types/dashboard";
+import { BarcodeLookupResponse } from "@/types/barcode";
 import {
   Producto,
   ProductosPaginadosResponse,
@@ -699,6 +700,37 @@ export async function buscarProductoPorCodigo(
     }
     throw new Error("Error de conexión al verificar el código de barras.");
   }
+}
+
+/**
+ * Consulta información de un código de barras en la base local y en Open Food Facts.
+ * Endpoint: GET /api/productos/lookup-barcode?barcode=CODIGO
+ */
+export async function lookupBarcode(
+  codigo: string,
+  token: string | null,
+  signal?: AbortSignal
+): Promise<BarcodeLookupResponse> {
+  const cleanCodigo = encodeURIComponent(codigo.trim());
+  const url = `${API_BASE_URL}/productos/lookup-barcode?barcode=${cleanCodigo}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: getAuthHeaders(token),
+    signal,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      errorData?.message ||
+        `Error al consultar el código de barras (${response.status})`
+    );
+  }
+
+  const data: BarcodeLookupResponse = await response.json();
+  return data;
 }
 
 /**
