@@ -7,7 +7,7 @@ import { ReporteMovimientoInventario } from "@/types/reporte";
 import { useMoneda } from "@/lib/currency";
 import { ReportesHeader } from "@/components/reportes/ReportesHeader";
 import { FiltrosFecha } from "@/components/reportes/FiltrosFecha";
-import { ArrowLeftRight, ArrowDownLeft, ArrowUpRight, Loader2 } from "lucide-react";
+import { ArrowLeftRight, ArrowDownLeft, ArrowUpRight, Loader2, RotateCcw } from "lucide-react";
 import { formatDateTimeLegible } from "@/lib/formatDate";
 
 export default function MovimientosInventarioPage() {
@@ -94,10 +94,14 @@ export default function MovimientosInventarioPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {movimientos.map((m, idx) => {
+                  const tipoLower = (m.tipo || "").toLowerCase();
+                  const esAnulacion = tipoLower.includes("anula");
                   const esEntrada =
-                    m.tipo?.toLowerCase() === "entrada" ||
-                    m.tipo?.toLowerCase() === "compra" ||
-                    m.tipo?.toLowerCase() === "ingreso";
+                    !esAnulacion &&
+                    (tipoLower === "entrada" ||
+                      tipoLower === "compra" ||
+                      tipoLower === "ingreso" ||
+                      tipoLower.includes("entrada"));
 
                   return (
                     <tr key={`${m.fecha}-${idx}`} className="hover:bg-slate-50/60 transition-colors">
@@ -107,12 +111,16 @@ export default function MovimientosInventarioPage() {
                       <td className="py-3 px-4">
                         <span
                           className={`inline-flex items-center gap-1 font-bold text-[10px] px-2.5 py-0.5 rounded-full border ${
-                            esEntrada
+                            esAnulacion
+                              ? "bg-amber-50 text-amber-800 border-amber-200"
+                              : esEntrada
                               ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                               : "bg-rose-50 text-rose-700 border-rose-200"
                           }`}
                         >
-                          {esEntrada ? (
+                          {esAnulacion ? (
+                            <RotateCcw className="w-3 h-3 text-amber-600" />
+                          ) : esEntrada ? (
                             <ArrowDownLeft className="w-3 h-3 text-emerald-600" />
                           ) : (
                             <ArrowUpRight className="w-3 h-3 text-rose-600" />
@@ -122,11 +130,9 @@ export default function MovimientosInventarioPage() {
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-900">{m.producto}</td>
                       <td
-                        className={`py-3 px-4 text-center font-bold font-mono ${
-                          esEntrada ? "text-emerald-700" : "text-rose-700"
-                        }`}
+                        className="py-3 px-4 text-center font-bold font-mono text-slate-800"
                       >
-                        {esEntrada ? `+${m.cantidad}` : `-${m.cantidad}`}
+                        {Math.abs(Math.round(Number(m.cantidad))) || 0}
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-slate-600">
                         {formatMonto(m.precio_unitario)}

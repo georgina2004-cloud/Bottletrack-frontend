@@ -68,6 +68,7 @@ import {
   ReporteStockBajo,
   ReporteVentaPorFecha,
   ReporteVentasPorVendedor,
+  ReporteVentasPorVendedorResponse,
   ReporteComprasPorProveedor,
   ReporteMovimientoInventario,
 } from "@/types/reporte";
@@ -1171,6 +1172,15 @@ export async function obtenerVentas(
   if (filtros.hasta && filtros.hasta.trim() !== "") {
     params.append("hasta", filtros.hasta.trim());
   }
+  if (filtros.user_id !== undefined && filtros.user_id !== null && String(filtros.user_id).trim() !== "") {
+    params.append("user_id", String(filtros.user_id).trim());
+  }
+  if (filtros.vendedor_id !== undefined && filtros.vendedor_id !== null && String(filtros.vendedor_id).trim() !== "") {
+    params.append("vendedor_id", String(filtros.vendedor_id).trim());
+  }
+  if (filtros.per_page) {
+    params.append("per_page", String(filtros.per_page));
+  }
 
   const queryString = params.toString();
   const url = `${API_BASE_URL}/ventas${queryString ? `?${queryString}` : ""}`;
@@ -1756,6 +1766,14 @@ export async function descargarReporteArchivo(
   if (filtros.hasta && filtros.hasta.trim() !== "") {
     params.append("hasta", filtros.hasta.trim());
   }
+  if (
+    filtros.vendedor_id !== undefined &&
+    filtros.vendedor_id !== null &&
+    String(filtros.vendedor_id).trim() !== "" &&
+    String(filtros.vendedor_id) !== "todos"
+  ) {
+    params.append("vendedor_id", String(filtros.vendedor_id).trim());
+  }
   params.append("formato", formato);
 
   const queryString = params.toString();
@@ -1967,13 +1985,21 @@ export async function obtenerReporteVentasPorFechas(
 export async function obtenerReporteVentasPorVendedor(
   filtros: ReporteFiltrosFechas = {},
   token?: string | null
-): Promise<ReporteVentasPorVendedor[]> {
+): Promise<ReporteVentasPorVendedorResponse> {
   const params = new URLSearchParams();
   if (filtros.desde && filtros.desde.trim() !== "") {
     params.append("desde", filtros.desde.trim());
   }
   if (filtros.hasta && filtros.hasta.trim() !== "") {
     params.append("hasta", filtros.hasta.trim());
+  }
+  if (
+    filtros.vendedor_id !== undefined &&
+    filtros.vendedor_id !== null &&
+    String(filtros.vendedor_id).trim() !== "" &&
+    String(filtros.vendedor_id) !== "todos"
+  ) {
+    params.append("vendedor_id", String(filtros.vendedor_id).trim());
   }
 
   const queryString = params.toString();
@@ -1996,9 +2022,29 @@ export async function obtenerReporteVentasPorVendedor(
   }
 
   const data = await response.json();
-  return Array.isArray(data)
-    ? (data as ReporteVentasPorVendedor[])
-    : ((data.data || []) as ReporteVentasPorVendedor[]);
+
+  if (Array.isArray(data)) {
+    const items = data as ReporteVentasPorVendedor[];
+    const sumTransacciones = items.reduce(
+      (acc, curr) => acc + (Number(curr.transacciones ?? curr.total_ventas) || 0),
+      0
+    );
+    const sumFacturado = items.reduce(
+      (acc, curr) => acc + (Number(curr.total_facturado ?? curr.monto_total) || 0),
+      0
+    );
+    return {
+      data: items,
+      total_general_transacciones: sumTransacciones,
+      total_general_facturado: sumFacturado,
+    };
+  }
+
+  return {
+    data: (data.data || []) as ReporteVentasPorVendedor[],
+    total_general_transacciones: Number(data.total_general_transacciones ?? 0),
+    total_general_facturado: Number(data.total_general_facturado ?? 0),
+  };
 }
 
 /**
@@ -2694,6 +2740,7 @@ export async function obtenerAuditLogs(
 
   const queryParams = new URLSearchParams();
   if (filtros.usuario_id) queryParams.append("usuario_id", String(filtros.usuario_id));
+  if (filtros.accion && filtros.accion.trim()) queryParams.append("accion", filtros.accion.trim());
   if (filtros.desde && filtros.desde.trim()) queryParams.append("desde", filtros.desde.trim());
   if (filtros.hasta && filtros.hasta.trim()) queryParams.append("hasta", filtros.hasta.trim());
   if (filtros.modulo && filtros.modulo.trim()) queryParams.append("modulo", filtros.modulo.trim());

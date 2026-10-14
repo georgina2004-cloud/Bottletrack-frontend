@@ -208,6 +208,13 @@ export function ProductoMasivoForm({ onSuccess }: ProductoMasivoFormProps) {
         }
       }
 
+      if (fila.codigo_barras && fila.codigo_barras.trim() !== "") {
+        const cb = fila.codigo_barras.trim();
+        if (!/^[0-9]{8,14}$/.test(cb)) {
+          errores.codigo_barras = "Debe tener entre 8 y 14 dígitos numéricos.";
+        }
+      }
+
       if (Object.keys(errores).length > 0) {
         esValido = false;
         return {
@@ -554,16 +561,52 @@ export function ProductoMasivoForm({ onSuccess }: ProductoMasivoFormProps) {
                       <td className="py-2 px-2">
                         <input
                           type="text"
-                          placeholder="EAN / UPC"
+                          inputMode="numeric"
+                          maxLength={14}
+                          pattern="[0-9]*"
+                          placeholder="EAN / UPC (8-14)"
                           value={fila.codigo_barras}
                           disabled={isSaving}
-                          onChange={(e) =>
+                          onKeyDown={(e) => {
+                            const allowedKeys = [
+                              "Backspace",
+                              "Tab",
+                              "Delete",
+                              "ArrowLeft",
+                              "ArrowRight",
+                              "ArrowUp",
+                              "ArrowDown",
+                              "Home",
+                              "End",
+                              "Enter",
+                            ];
+                            if (
+                              !allowedKeys.includes(e.key) &&
+                              !e.ctrlKey &&
+                              !e.metaKey &&
+                              !/^[0-9]$/.test(e.key)
+                            ) {
+                              e.preventDefault();
+                            }
+                          }}
+                          onChange={(e) => {
+                            const soloDigitos = e.target.value.replace(/[^0-9]/g, "").slice(0, 14);
                             handleActualizarCampo(
                               fila.id,
                               "codigo_barras",
-                              e.target.value
-                            )
-                          }
+                              soloDigitos
+                            );
+                          }}
+                          onPaste={(e) => {
+                            e.preventDefault();
+                            const paste = e.clipboardData.getData("text");
+                            const cleanPaste = paste.replace(/[^0-9]/g, "").slice(0, 14);
+                            handleActualizarCampo(
+                              fila.id,
+                              "codigo_barras",
+                              cleanPaste
+                            );
+                          }}
                           className={`w-full px-2 py-1.5 rounded-lg border text-xs font-mono text-slate-900 bg-white outline-none transition-all ${
                             fila.erroresCampos.codigo_barras
                               ? "border-rose-400 bg-rose-50/20 focus:ring-2 focus:ring-rose-400/20"

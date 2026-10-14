@@ -11,9 +11,17 @@ interface ExportButtonsProps {
   tipo: TipoReporte;
   desde?: string;
   hasta?: string;
+  vendedorId?: string | number;
+  extraFiltros?: Record<string, string | number | undefined>;
 }
 
-export function ExportButtons({ tipo, desde, hasta }: ExportButtonsProps) {
+export function ExportButtons({
+  tipo,
+  desde,
+  hasta,
+  vendedorId,
+  extraFiltros,
+}: ExportButtonsProps) {
   const { token } = useAuth();
   const [exportando, setExportando] = useState<FormatoReporte | null>(null);
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
@@ -25,7 +33,17 @@ export function ExportButtons({ tipo, desde, hasta }: ExportButtonsProps) {
     setMensajeError(null);
 
     try {
-      await descargarReporteArchivo(tipo, formato, { desde, hasta }, token);
+      await descargarReporteArchivo(
+        tipo,
+        formato,
+        {
+          desde,
+          hasta,
+          vendedor_id: vendedorId,
+          ...extraFiltros,
+        },
+        token
+      );
       setMensajeExito(`Reporte exportado exitosamente en ${formato.toUpperCase()}.`);
       setTimeout(() => setMensajeExito(null), 3500);
     } catch (err: unknown) {

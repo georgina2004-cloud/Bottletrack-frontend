@@ -86,10 +86,11 @@ export default function StockBajoPage() {
                       : (item as any).stock_min ?? (item as any).stockMinimo ?? 0
                   );
 
-                  const deficit =
+                  const rawDeficit =
                     item.deficit !== undefined
                       ? item.deficit
                       : Math.max(0, stockMinimo - stockActual);
+                  const deficit = Math.max(0, Math.round(Number(rawDeficit)));
                   const isCritical = stockActual <= 0;
 
                   return (
@@ -103,7 +104,7 @@ export default function StockBajoPage() {
                         {stockMinimo}
                       </td>
                       <td className="py-3 px-4 text-center font-bold text-amber-700">
-                        -{deficit} uds
+                        {deficit} uds
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span

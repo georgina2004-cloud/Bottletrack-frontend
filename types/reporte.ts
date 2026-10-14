@@ -5,6 +5,7 @@
 export interface ReporteFiltrosFechas {
   desde?: string;
   hasta?: string;
+  vendedor_id?: string | number;
 }
 
 export type TipoReporte =
@@ -111,9 +112,19 @@ export interface ReporteVentaPorFecha {
  * 5. Respuesta para GET /api/reportes/ventas-por-vendedor
  */
 export interface ReporteVentasPorVendedor {
+  id?: number;
   vendedor: string;
-  total_ventas: number;
-  monto_total: number | string;
+  transacciones?: number;
+  total_facturado?: number | string;
+  // Retrocompatibilidad
+  total_ventas?: number;
+  monto_total?: number | string;
+}
+
+export interface ReporteVentasPorVendedorResponse {
+  data: ReporteVentasPorVendedor[];
+  total_general_transacciones: number;
+  total_general_facturado: number;
 }
 
 /**

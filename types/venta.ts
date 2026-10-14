@@ -82,6 +82,9 @@ export interface VentaFiltros {
   busqueda?: string;
   desde?: string;
   hasta?: string;
+  user_id?: number | string;
+  vendedor_id?: number | string;
+  per_page?: number;
 }
 
 export interface CarritoItem {

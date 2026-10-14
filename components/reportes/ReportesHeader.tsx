@@ -12,6 +12,8 @@ interface ReportesHeaderProps {
   tipo?: TipoReporte;
   desde?: string;
   hasta?: string;
+  vendedorId?: string | number;
+  extraFiltros?: Record<string, string | number | undefined>;
   badge?: string;
 }
 
@@ -21,6 +23,8 @@ export function ReportesHeader({
   tipo,
   desde,
   hasta,
+  vendedorId,
+  extraFiltros,
   badge,
 }: ReportesHeaderProps) {
   return (
@@ -55,7 +59,13 @@ export function ReportesHeader({
 
       {tipo && (
         <div className="shrink-0">
-          <ExportButtons tipo={tipo} desde={desde} hasta={hasta} />
+          <ExportButtons
+            tipo={tipo}
+            desde={desde}
+            hasta={hasta}
+            vendedorId={vendedorId}
+            extraFiltros={extraFiltros}
+          />
         </div>
       )}
     </div>

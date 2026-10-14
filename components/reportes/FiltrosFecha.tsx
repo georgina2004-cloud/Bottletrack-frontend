@@ -12,6 +12,7 @@ interface FiltrosFechaProps {
   onFiltrar: () => void;
   onLimpiar?: () => void;
   isLoading?: boolean;
+  children?: React.ReactNode;
 }
 
 export function FiltrosFecha({
@@ -22,6 +23,7 @@ export function FiltrosFecha({
   onFiltrar,
   onLimpiar,
   isLoading = false,
+  children,
 }: FiltrosFechaProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +68,8 @@ export function FiltrosFecha({
             className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-brand shadow-2xs cursor-pointer"
           />
         </div>
+
+        {children}
       </div>
 
       <div className="flex items-center gap-2">

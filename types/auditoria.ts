@@ -20,6 +20,7 @@ export interface AuditLog {
   user_agent?: string | null;
   created_at: string;
   usuario?: AuditLogUsuario | null;
+  auditable?: Record<string, any> | null;
 }
 
 export interface AuditLogsPaginadosResponse {
@@ -34,6 +35,7 @@ export interface AuditLogsPaginadosResponse {
 
 export interface AuditLogFiltros {
   usuario_id?: number | string;
+  accion?: string;
   desde?: string;
   hasta?: string;
   modulo?: string;

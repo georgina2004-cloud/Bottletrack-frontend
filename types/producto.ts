@@ -52,6 +52,8 @@ export interface Producto {
   imagen_url: string | null; // URL absoluta de la imagen o null
   activo: boolean;
   fecha_vencimiento?: string | null;
+  vencimiento_estado?: "vencido" | "por_vencer" | "vigente" | null;
+  dias_para_vencer?: number | null;
   presentaciones?: Presentacion[];
   created_at?: string;
   updated_at?: string;

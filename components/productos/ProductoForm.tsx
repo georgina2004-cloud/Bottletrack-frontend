@@ -56,7 +56,9 @@ export const productoFormSchema = z.object({
   codigo_barras: z
     .string()
     .trim()
-    .max(64, "El código de barras no puede exceder 64 caracteres.")
+    .refine((val) => !val || /^[0-9]{8,14}$/.test(val), {
+      message: "El código de barras debe contener únicamente entre 8 y 14 dígitos numéricos.",
+    })
     .optional()
     .nullable()
     .transform((val) => (val && val.length > 0 ? val : null)),
@@ -617,13 +619,51 @@ export function ProductoForm({
               error={errors.codigo_barras?.message}
               helperText={
                 !isEditing
-                  ? "Escanea con la pistola o presiona Enter para autocompletar"
-                  : "Código numérico impreso en la botella"
+                  ? "Solo números (8 a 14 dígitos). Escanea con la pistola o presiona Enter para autocompletar"
+                  : "Solo números (8 a 14 dígitos)"
               }
+              maxLength={14}
+              inputMode="numeric"
+              pattern="[0-9]*"
               {...register("codigo_barras", {
-                onChange: () => resetBarcode(),
+                onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+                  const soloNumeros = e.target.value.replace(/[^0-9]/g, "").slice(0, 14);
+                  e.target.value = soloNumeros;
+                  setValue("codigo_barras", soloNumeros, { shouldValidate: true, shouldDirty: true });
+                  resetBarcode();
+                },
               })}
-              onKeyDown={manejarCodigoKeyDown}
+              onKeyDown={(e) => {
+                const allowedKeys = [
+                  "Backspace",
+                  "Tab",
+                  "Delete",
+                  "ArrowLeft",
+                  "ArrowRight",
+                  "ArrowUp",
+                  "ArrowDown",
+                  "Home",
+                  "End",
+                  "Enter",
+                ];
+                if (
+                  !allowedKeys.includes(e.key) &&
+                  !e.ctrlKey &&
+                  !e.metaKey &&
+                  !/^[0-9]$/.test(e.key)
+                ) {
+                  e.preventDefault();
+                  return;
+                }
+                manejarCodigoKeyDown(e);
+              }}
+              onPaste={(e) => {
+                e.preventDefault();
+                const paste = e.clipboardData.getData("text");
+                const clean = paste.replace(/[^0-9]/g, "").slice(0, 14);
+                setValue("codigo_barras", clean, { shouldValidate: true, shouldDirty: true });
+                resetBarcode();
+              }}
             />
             <EstadoBarcode
               estado={estadoBarcode}

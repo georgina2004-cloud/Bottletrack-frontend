@@ -12,6 +12,7 @@ import {
   crearVenta,
   abrirFacturaPDF,
   obtenerPresentaciones,
+  ValidationError,
 } from "@/lib/api";
 import { useCompanyConfig } from "@/context/CompanyConfigContext";
 import { useMoneda, formatPresentacionMl } from "@/lib/currency";
@@ -21,6 +22,7 @@ import { Presentacion } from "@/types/presentacion";
 import { CarritoItem, CrearVentaPayload } from "@/types/venta";
 import { ProductoImagenCard } from "@/components/ui/ProductoImagenCard";
 import { Button } from "@/components/ui/Button";
+import { diasParaVencer, textoVencimiento, formatDateLegible } from "@/lib/formatDate";
 import {
   ShoppingCart,
   Search,
@@ -28,6 +30,7 @@ import {
   Minus,
   Trash2,
   AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   ChevronRight,
   Receipt,
@@ -42,9 +45,9 @@ import {
   Layers,
   Wine,
   Banknote,
-  CreditCard,
   Coins,
   Check,
+  Clock,
 } from "lucide-react";
 
 interface ProductoConSugerencia {
@@ -53,6 +56,55 @@ interface ProductoConSugerencia {
 }
 
 const EMPTY_CATEGORIAS: Categoria[] = [];
+
+/**
+ * Obtiene el estado y detalle de vencimiento de un producto para el POS.
+ */
+export function getVencimientoInfo(prod: Producto) {
+  // 1. Usar flag/estado del backend si está presente
+  if (prod.vencimiento_estado === "vencido") {
+    return {
+      estado: "vencido" as const,
+      dias: prod.dias_para_vencer ?? -1,
+      texto: "Vencido",
+      fechaStr: prod.fecha_vencimiento,
+    };
+  }
+
+  if (prod.vencimiento_estado === "por_vencer") {
+    return {
+      estado: "por_vencer" as const,
+      dias: prod.dias_para_vencer ?? 30,
+      texto: textoVencimiento(prod.fecha_vencimiento) || "Por vencer",
+      fechaStr: prod.fecha_vencimiento,
+    };
+  }
+
+  // 2. Cálculo dinámico en el cliente en base a la fecha de vencimiento
+  if (prod.fecha_vencimiento) {
+    const dias = diasParaVencer(prod.fecha_vencimiento);
+    if (dias !== null) {
+      if (dias <= 0) {
+        return {
+          estado: "vencido" as const,
+          dias,
+          texto: textoVencimiento(prod.fecha_vencimiento) || "Vencido",
+          fechaStr: prod.fecha_vencimiento,
+        };
+      }
+      if (dias <= 30) {
+        return {
+          estado: "por_vencer" as const,
+          dias,
+          texto: textoVencimiento(prod.fecha_vencimiento) || `Vence en ${dias} días`,
+          fechaStr: prod.fecha_vencimiento,
+        };
+      }
+    }
+  }
+
+  return null;
+}
 
 export default function NuevaVentaPOSPage() {
   const { token } = useAuth();
@@ -122,6 +174,7 @@ export default function NuevaVentaPOSPage() {
   const [carrito, setCarrito] = useState<CarritoItem[]>([]);
   const [clienteNombre, setClienteNombre] = useState<string>("");
   const [descuentoInput, setDescuentoInput] = useState<string>("");
+  const [errors, setErrors] = useState<Record<string, string[]>>({});
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorCobro, setErrorCobro] = useState<string | null>(null);
@@ -134,10 +187,10 @@ export default function NuevaVentaPOSPage() {
   const [isImprimiendoPdf, setIsImprimiendoPdf] = useState<boolean>(false);
   const [errorImpresionPdf, setErrorImpresionPdf] = useState<string | null>(null);
 
-  // Estados de Modal de Cobro y Método de Pago
+  // Estados de Modal de Cobro (Efectivo)
   const { moneda } = useCompanyConfig();
   const [showModalCobro, setShowModalCobro] = useState<boolean>(false);
-  const [metodoPago, setMetodoPago] = useState<"efectivo" | "tarjeta">("efectivo");
+  const metodoPago = "efectivo" as const;
   const [montoRecibido, setMontoRecibido] = useState<string>("");
 
   // Clave serializada para ejecutar sugerencias solo cuando cambian los productos en el carrito
@@ -338,6 +391,15 @@ export default function NuevaVentaPOSPage() {
     producto: Producto,
     presentacion: Presentacion
   ) => {
+    // Validar si el producto está vencido
+    const vencInfo = getVencimientoInfo(producto);
+    if (vencInfo?.estado === "vencido") {
+      setErrorCobro(
+        `El producto "${producto.nombre}" se encuentra vencido y no puede ser vendido.`
+      );
+      return;
+    }
+
     const equiv = Number(presentacion.unidades_equivalentes) || 1;
     const precio = parseFloat(String(presentacion.precio_venta)) || 0;
     const unidadesUsadas = calcularUnidadesBaseEnCarrito(producto.id);
@@ -391,6 +453,15 @@ export default function NuevaVentaPOSPage() {
   };
 
   const handleSeleccionarProducto = async (producto: Producto) => {
+    // Validar si el producto está vencido
+    const vencInfo = getVencimientoInfo(producto);
+    if (vencInfo?.estado === "vencido") {
+      setErrorCobro(
+        `El producto "${producto.nombre}" se encuentra vencido y no puede ser vendido.`
+      );
+      return;
+    }
+
     if (producto.stock_actual <= 0) return;
 
     // Si ya viene con presentaciones en el objeto producto
@@ -533,6 +604,27 @@ export default function NuevaVentaPOSPage() {
   const { formatMoneda: formatMoney } = useMoneda();
 
   // =========================================================================
+  // VALIDACIONES DEL DESCUENTO Y RESTRICCIONES DE COBRO
+  // =========================================================================
+  const descuentoNum = parseFloat(descuentoInput);
+  const isDescuentoNegativo = !isNaN(descuentoNum) && descuentoNum < 0;
+  const isDescuentoMayorSubtotal = !isNaN(descuentoNum) && descuentoNum > subtotal;
+  const clientDescuentoError = isDescuentoNegativo
+    ? "El descuento no puede ser menor que 0."
+    : isDescuentoMayorSubtotal
+    ? `El descuento no puede superar el subtotal actual (${formatMoney(subtotal)}).`
+    : null;
+
+  const discountErrorMessage = errors.descuento?.[0] || clientDescuentoError;
+  const hasDiscountError = Boolean(discountErrorMessage);
+
+  // Deshabilitar botón Cobrar si carrito vacío, enviando o descuento inválido (< 0 o > subtotal)
+  const isCobroDisabled =
+    carrito.length === 0 ||
+    isSubmitting ||
+    (!isNaN(descuentoNum) && (descuentoNum < 0 || descuentoNum > subtotal));
+
+  // =========================================================================
   // CÁLCULOS DE PAGO EN EFECTIVO Y CAMBIO
   // =========================================================================
   const montoRecibidoNum = parseFloat(montoRecibido) || 0;
@@ -543,9 +635,8 @@ export default function NuevaVentaPOSPage() {
 
   // Abrir modal de cobro configurando el monto por defecto
   const handleAbrirModalCobro = () => {
-    if (carrito.length === 0) return;
+    if (carrito.length === 0 || isCobroDisabled) return;
     setErrorCobro(null);
-    setMetodoPago("efectivo");
     setMontoRecibido(total.toFixed(2));
     setShowModalCobro(true);
   };
@@ -555,10 +646,24 @@ export default function NuevaVentaPOSPage() {
   // =========================================================================
   const handleConfirmarVenta = async () => {
     if (carrito.length === 0) return;
-    if (metodoPago === "efectivo" && !esMontoSuficiente) return;
+    if (!esMontoSuficiente) return;
+    if (!isNaN(descuentoNum) && (descuentoNum < 0 || descuentoNum > subtotal)) return;
+
+    // Verificar si algún producto en el carrito está vencido
+    const itemVencido = carrito.find((item) => {
+      const v = getVencimientoInfo(item.producto);
+      return v?.estado === "vencido";
+    });
+    if (itemVencido) {
+      setErrorCobro(
+        `El producto "${itemVencido.producto.nombre}" se encuentra vencido y no puede ser vendido.`
+      );
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorCobro(null);
+    setErrors({});
 
     const payload: CrearVentaPayload = {
       cliente_nombre: clienteNombre.trim() ? clienteNombre.trim() : undefined,
@@ -584,15 +689,49 @@ export default function NuevaVentaPOSPage() {
       setCarrito([]);
       setClienteNombre("");
       setDescuentoInput("");
+      setErrors({});
       setMontoRecibido("");
       mutateProductos();
     } catch (err: unknown) {
       console.error("Error al procesar cobro de venta:", err);
-      setErrorCobro(
-        err instanceof Error
-          ? err.message
-          : "Error inesperado al procesar la venta. Por favor, revisa las cantidades o el inventario disponible."
-      );
+      let errorMsg =
+        "Error inesperado al procesar la venta. Por favor, revisa las cantidades o el inventario disponible.";
+      let validationErrors: Record<string, string[]> = {};
+
+      if (err instanceof ValidationError) {
+        errorMsg = err.message || "Los datos de la venta no son válidos.";
+        validationErrors = err.errors || {};
+      } else if (
+        typeof err === "object" &&
+        err !== null &&
+        "response" in err &&
+        (err as any).response?.status === 422
+      ) {
+        const resData = (err as any).response?.data;
+        errorMsg = resData?.message || "Error de validación en la venta.";
+        validationErrors = resData?.errors || {};
+      } else if (
+        typeof err === "object" &&
+        err !== null &&
+        "data" in err &&
+        (err as any).data?.errors
+      ) {
+        validationErrors = (err as any).data.errors;
+        errorMsg = (err as any).message || "Error de validación.";
+      } else if (
+        typeof err === "object" &&
+        err !== null &&
+        "errors" in err &&
+        typeof (err as any).errors === "object"
+      ) {
+        validationErrors = (err as any).errors || {};
+        errorMsg = (err as any).message || "Error de validación.";
+      } else if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+
+      setErrors(validationErrors);
+      setErrorCobro(errorMsg);
       setShowModalCobro(false);
     } finally {
       setIsSubmitting(false);
@@ -786,27 +925,50 @@ export default function NuevaVentaPOSPage() {
                     {sugerencias.map(({ producto: prod, motivo }) => {
                       const tieneStock = prod.stock_actual > 0;
                       const unidadesEnCarrito = calcularUnidadesBaseEnCarrito(prod.id);
+                      const vencInfo = getVencimientoInfo(prod);
+                      const isVencido = vencInfo?.estado === "vencido";
+                      const isPorVencer = vencInfo?.estado === "por_vencer";
                       const stockAlcanzado =
                         unidadesEnCarrito >= prod.stock_actual && tieneStock;
 
                       return (
                         <div
                           key={`sugerencia-${prod.id}`}
-                          className={`min-w-[165px] sm:min-w-[180px] max-w-[200px] shrink-0 bg-white rounded-xl border p-2.5 flex flex-col justify-between transition-all duration-200 ${!tieneStock
+                          className={`min-w-[165px] sm:min-w-[180px] max-w-[200px] shrink-0 bg-white rounded-xl border p-2.5 flex flex-col justify-between transition-all duration-200 ${
+                            isVencido
+                              ? "opacity-60 border-rose-200 bg-rose-50/40"
+                              : !tieneStock
                               ? "opacity-50 border-slate-200 bg-slate-50"
                               : stockAlcanzado
-                                ? "border-brand/30 bg-brand/5"
-                                : "border-brand/20 hover:border-brand hover:shadow-xs"
-                            }`}
+                              ? "border-brand/30 bg-brand/5"
+                              : "border-brand/20 hover:border-brand hover:shadow-xs"
+                          }`}
                         >
                           <div className="mb-2">
-                            {/* Motivo de la sugerencia */}
-                            <span
-                              className="text-[10px] font-semibold text-brand bg-brand/10 border border-brand/20 px-1.5 py-0.5 rounded-md inline-block max-w-full truncate mb-1"
-                              title={motivo}
-                            >
-                              {motivo}
-                            </span>
+                            {/* Badges superiores: motivo y vencimiento */}
+                            <div className="flex flex-wrap gap-1 mb-1">
+                              <span
+                                className="text-[10px] font-semibold text-brand bg-brand/10 border border-brand/20 px-1.5 py-0.5 rounded-md inline-block max-w-full truncate"
+                                title={motivo}
+                              >
+                                {motivo}
+                              </span>
+
+                              {isVencido && (
+                                <span className="text-[10px] font-bold text-rose-700 bg-rose-100 border border-rose-300 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5">
+                                  <Clock className="w-2.5 h-2.5" /> Vencido
+                                </span>
+                              )}
+
+                              {isPorVencer && !isVencido && (
+                                <span
+                                  className="text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5"
+                                  title={prod.fecha_vencimiento ? `Vence: ${formatDateLegible(prod.fecha_vencimiento)}` : undefined}
+                                >
+                                  <Clock className="w-2.5 h-2.5" /> Por vencer
+                                </span>
+                              )}
+                            </div>
 
                             <span
                               className="text-xs font-bold text-slate-900 block truncate"
@@ -819,12 +981,17 @@ export default function NuevaVentaPOSPage() {
                                 {formatMoneda(prod.precio_venta)}
                               </span>
                               <span
-                                className={`text-[10px] font-semibold px-1.5 py-0.2 rounded ${!tieneStock
+                                className={`text-[10px] font-semibold px-1.5 py-0.2 rounded ${
+                                  isVencido
+                                    ? "text-rose-700 bg-rose-100"
+                                    : !tieneStock
                                     ? "text-rose-600 bg-rose-50"
                                     : "text-slate-500 bg-slate-100"
-                                  }`}
+                                }`}
                               >
-                                {tieneStock
+                                {isVencido
+                                  ? "Vencido"
+                                  : tieneStock
                                   ? `${prod.stock_actual} disp.`
                                   : "Agotado"}
                               </span>
@@ -834,18 +1001,24 @@ export default function NuevaVentaPOSPage() {
                           <button
                             type="button"
                             disabled={
+                              isVencido ||
                               !tieneStock ||
                               stockAlcanzado ||
                               isLoadingPresId === prod.id
                             }
                             onClick={() => handleSeleccionarProducto(prod)}
-                            className={`w-full py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${!tieneStock || stockAlcanzado
+                            className={`w-full py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+                              isVencido
+                                ? "bg-rose-100 text-rose-500 border border-rose-200 cursor-not-allowed"
+                                : !tieneStock || stockAlcanzado
                                 ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                                : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98]"
-                              }`}
+                                : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98] cursor-pointer"
+                            }`}
                           >
                             {isLoadingPresId === prod.id ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : isVencido ? (
+                              <span>Vencido</span>
                             ) : (
                               <>
                                 <Plus className="w-3.5 h-3.5" />
@@ -949,18 +1122,29 @@ export default function NuevaVentaPOSPage() {
                       const isSelected = unidadesEnCarrito > 0;
                       const stockAlcanzado = unidadesEnCarrito >= prod.stock_actual && tieneStock;
                       const isLoadingThis = isLoadingPresId === prod.id;
+                      const vencInfo = getVencimientoInfo(prod);
+                      const isVencido = vencInfo?.estado === "vencido";
+                      const isPorVencer = vencInfo?.estado === "por_vencer";
 
                       return (
                         <div
                           key={prod.id}
                           onClick={() => {
+                            if (isVencido) {
+                              setErrorCobro(
+                                `El producto "${prod.nombre}" se encuentra vencido y no puede ser vendido.`
+                              );
+                              return;
+                            }
                             if (tieneStock && !stockAlcanzado && !isLoadingThis) {
                               handleSeleccionarProducto(prod);
                             }
                           }}
                           className={`
                             group relative flex flex-col justify-between rounded-2xl border transition-all duration-200 select-none overflow-hidden bg-white
-                            ${!tieneStock
+                            ${isVencido
+                              ? "opacity-60 border-rose-200 bg-rose-50/20 cursor-not-allowed"
+                              : !tieneStock
                               ? "opacity-45 cursor-not-allowed border-slate-200 bg-slate-50/60 pointer-events-none"
                               : isSelected
                                 ? "cursor-pointer shadow-md"
@@ -968,7 +1152,7 @@ export default function NuevaVentaPOSPage() {
                             }
                           `}
                           style={
-                            isSelected && tieneStock
+                            isSelected && tieneStock && !isVencido
                               ? {
                                 borderColor: "var(--primary-brand)",
                                 boxShadow:
@@ -985,7 +1169,7 @@ export default function NuevaVentaPOSPage() {
                             badges={
                               <>
                                 {/* Badge de unidades en carrito */}
-                                {unidadesEnCarrito > 0 && (
+                                {unidadesEnCarrito > 0 && !isVencido && (
                                   <span
                                     className="absolute top-2.5 right-2.5 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full text-[11px] font-bold shadow-md animate-in zoom-in-75 duration-150"
                                     style={{
@@ -998,8 +1182,33 @@ export default function NuevaVentaPOSPage() {
                                   </span>
                                 )}
 
+                                {/* Badge Por Vencer (ámbar/amarillo) */}
+                                {isPorVencer && !isVencido && (
+                                  <span
+                                    className="absolute top-2.5 left-2.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-xs bg-amber-50 text-amber-800 border border-amber-300 backdrop-blur-xs"
+                                    title={prod.fecha_vencimiento ? `Vence: ${formatDateLegible(prod.fecha_vencimiento)}` : undefined}
+                                  >
+                                    <Clock className="w-3 h-3 text-amber-600" />
+                                    <span>Por vencer {prod.fecha_vencimiento ? `(${formatDateLegible(prod.fecha_vencimiento)})` : ""}</span>
+                                  </span>
+                                )}
+
+                                {/* Overlay informativo de producto vencido */}
+                                {isVencido && (
+                                  <div className="absolute inset-0 bg-white/80 backdrop-blur-[1px] flex flex-col items-center justify-center p-2 text-center">
+                                    <span className="text-[11px] font-bold tracking-wider uppercase text-rose-700 bg-rose-100 border border-rose-300 px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1">
+                                      <Clock className="w-3.5 h-3.5" /> Vencido
+                                    </span>
+                                    {prod.fecha_vencimiento && (
+                                      <span className="text-[10px] text-rose-600 font-medium mt-1">
+                                        Venció: {formatDateLegible(prod.fecha_vencimiento)}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
                                 {/* Overlay informativo de stock agotado */}
-                                {!tieneStock && (
+                                {!tieneStock && !isVencido && (
                                   <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
                                     <span className="text-[10px] font-bold tracking-wider uppercase text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full shadow-xs">
                                       Agotado
@@ -1031,7 +1240,7 @@ export default function NuevaVentaPOSPage() {
                               {/* Nombre del producto en tipografía serif destacada */}
                               <h3
                                 className="font-serif text-sm sm:text-[15px] font-bold text-slate-900 leading-snug line-clamp-2 transition-colors group-hover:text-slate-950"
-                                style={isSelected ? { color: "var(--primary-brand)" } : undefined}
+                                style={isSelected && !isVencido ? { color: "var(--primary-brand)" } : undefined}
                               >
                                 {prod.nombre}
                               </h3>
@@ -1047,7 +1256,9 @@ export default function NuevaVentaPOSPage() {
                                   {formatMoney(prod.precio_venta)}
                                 </div>
                                 <p className="text-[11px] text-slate-400 mt-1">
-                                  {!tieneStock
+                                  {isVencido
+                                    ? "Producto vencido"
+                                    : !tieneStock
                                     ? "Sin existencias"
                                     : stockAlcanzado
                                       ? "Stock máx. alcanzado"
@@ -1058,14 +1269,26 @@ export default function NuevaVentaPOSPage() {
                               {/* Botón de acción circular (+) */}
                               <button
                                 type="button"
-                                disabled={!tieneStock || stockAlcanzado || isLoadingThis}
-                                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform duration-150 group-hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                                style={{
-                                  backgroundColor: "var(--primary-brand)",
-                                  color: "var(--primary-brand-text, #ffffff)",
-                                }}
+                                disabled={!tieneStock || stockAlcanzado || isLoadingThis || isVencido}
+                                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform duration-150 ${
+                                  isVencido
+                                    ? "bg-rose-100 text-rose-400 border border-rose-200 cursor-not-allowed"
+                                    : !tieneStock || stockAlcanzado
+                                    ? "disabled:opacity-40 disabled:cursor-not-allowed"
+                                    : "group-hover:scale-105 active:scale-95 cursor-pointer"
+                                }`}
+                                style={
+                                  !isVencido
+                                    ? {
+                                        backgroundColor: "var(--primary-brand)",
+                                        color: "var(--primary-brand-text, #ffffff)",
+                                      }
+                                    : undefined
+                                }
                                 title={
-                                  !tieneStock
+                                  isVencido
+                                    ? "Producto vencido - No se puede vender"
+                                    : !tieneStock
                                     ? "Producto agotado"
                                     : stockAlcanzado
                                       ? "No hay más unidades disponibles"
@@ -1137,19 +1360,52 @@ export default function NuevaVentaPOSPage() {
 
                   {/* Descuento */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
-                      <Tag className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Descuento fijo (C$) (opcional)</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Descuento fijo ({moneda || "C$"}) (opcional)</span>
+                      </label>
+                      {subtotal > 0 && (
+                        <span className="text-[10px] text-slate-400">
+                          Máx: {formatMoney(subtotal)}
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="number"
                       min="0"
-                      step="0.5"
+                      step="0.01"
+                      max={subtotal}
                       placeholder="0.00"
                       value={descuentoInput}
-                      onChange={(e) => setDescuentoInput(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 text-slate-900 placeholder:text-slate-400 font-sans"
+                      onKeyDown={(e) => {
+                        // Impedir signos negativos y caracteres exponenciales
+                        if (["-", "e", "E", "+"].includes(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      onChange={(e) => {
+                        setDescuentoInput(e.target.value);
+                        if (errors.descuento) {
+                          setErrors((prev) => {
+                            const next = { ...prev };
+                            delete next.descuento;
+                            return next;
+                          });
+                        }
+                      }}
+                      className={`w-full px-3 py-1.5 text-xs bg-white rounded-lg focus:outline-none focus:ring-2 font-sans placeholder:text-slate-400 transition-colors ${
+                        hasDiscountError
+                          ? "border border-red-500 focus:border-red-500 focus:ring-red-500/20 text-red-900"
+                          : "border border-slate-200 focus:border-brand focus:ring-brand/15 text-slate-900"
+                      }`}
                     />
+                    {hasDiscountError && (
+                      <p className="text-red-600 text-xs mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{discountErrorMessage}</span>
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1202,6 +1458,12 @@ export default function NuevaVentaPOSPage() {
                                   {nombrePresentacion}
                                   {equiv > 1 && ` (${equiv} u.)`}
                                 </span>
+                                {getVencimientoInfo(item.producto)?.estado === "por_vencer" && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                    <Clock className="w-2.5 h-2.5" />
+                                    Por vencer
+                                  </span>
+                                )}
                               </div>
 
                               <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
@@ -1341,8 +1603,8 @@ export default function NuevaVentaPOSPage() {
                       type="button"
                       size="lg"
                       onClick={handleAbrirModalCobro}
-                      disabled={carrito.length === 0 || isSubmitting}
-                      className="w-full text-sm font-bold gap-2 py-3 shadow-md shadow-brand/25 transition-all cursor-pointer"
+                      disabled={isCobroDisabled}
+                      className="w-full text-sm font-bold gap-2 py-3 shadow-md shadow-brand/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-auto"
                     >
                       <ShoppingCart className="w-4 h-4" />
                       <span>Cobrar {formatMoney(total)}</span>
@@ -1402,6 +1664,18 @@ export default function NuevaVentaPOSPage() {
                     <X className="w-5 h-5" />
                   </button>
                 </div>
+
+                {/* Aviso visual en el modal si el producto está por vencer */}
+                {getVencimientoInfo(selectorProducto.producto)?.estado === "por_vencer" && (
+                  <div className="mx-5 mt-3 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      <strong>Aviso de lote:</strong> Este producto vence el{" "}
+                      {formatDateLegible(selectorProducto.producto.fecha_vencimiento)} (
+                      {getVencimientoInfo(selectorProducto.producto)?.texto}).
+                    </span>
+                  </div>
+                )}
 
                 {/* Lista de Presentaciones tipo Pills / Tarjetas */}
                 <div className="p-5 space-y-3 max-h-[380px] overflow-y-auto">
@@ -1569,183 +1843,116 @@ export default function NuevaVentaPOSPage() {
                     </div>
                   </div>
 
-                  {/* Selector de Método de Pago */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 block">
-                      Método de Pago
-                    </label>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {/* Opción Efectivo */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMetodoPago("efectivo");
-                          if (!montoRecibido) setMontoRecibido(total.toFixed(2));
+                  {/* Indicador de Método de Pago: Solo Efectivo */}
+                  <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/80">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center shadow-2xs"
+                        style={{
+                          backgroundColor: "var(--primary-brand)",
+                          color: "var(--primary-brand-text, #ffffff)",
                         }}
-                        className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${metodoPago === "efectivo"
-                            ? "border-[var(--primary-brand)] bg-[var(--primary-brand)]/5 ring-2 ring-[var(--primary-brand)]/20 text-slate-900 shadow-xs"
-                            : "border-slate-200 hover:border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                          }`}
                       >
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center ${metodoPago === "efectivo"
-                              ? "bg-[var(--primary-brand)] text-white shadow-2xs"
-                              : "bg-slate-100 text-slate-500"
-                            }`}
-                          style={
-                            metodoPago === "efectivo"
-                              ? {
-                                backgroundColor: "var(--primary-brand)",
-                                color: "var(--primary-brand-text, #ffffff)",
-                              }
-                              : undefined
-                          }
-                        >
-                          <Coins className="w-4 h-4" />
-                        </div>
-                        <span className="text-xs font-bold">Efectivo</span>
-                      </button>
-
-                      {/* Opción Tarjeta */}
-                      <button
-                        type="button"
-                        onClick={() => setMetodoPago("tarjeta")}
-                        className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${metodoPago === "tarjeta"
-                            ? "border-[var(--primary-brand)] bg-[var(--primary-brand)]/5 ring-2 ring-[var(--primary-brand)]/20 text-slate-900 shadow-xs"
-                            : "border-slate-200 hover:border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                          }`}
-                      >
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center ${metodoPago === "tarjeta"
-                              ? "bg-[var(--primary-brand)] text-white shadow-2xs"
-                              : "bg-slate-100 text-slate-500"
-                            }`}
-                          style={
-                            metodoPago === "tarjeta"
-                              ? {
-                                backgroundColor: "var(--primary-brand)",
-                                color: "var(--primary-brand-text, #ffffff)",
-                              }
-                              : undefined
-                          }
-                        >
-                          <CreditCard className="w-4 h-4" />
-                        </div>
-                        <span className="text-xs font-bold">Tarjeta</span>
-                      </button>
+                        <Coins className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-800">
+                        Pago en Efectivo
+                      </span>
                     </div>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      Moneda: {moneda || "C$"}
+                    </span>
                   </div>
 
-                  {/* Panel según Método Seleccionado */}
-                  {metodoPago === "efectivo" ? (
-                    <div className="space-y-3 pt-1">
-                      {/* Input Monto Recibido */}
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">
-                          Monto Recibido del Cliente
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 select-none">
-                            {moneda || "C$"}
-                          </span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            value={montoRecibido}
-                            onChange={(e) => setMontoRecibido(e.target.value)}
-                            disabled={isSubmitting}
-                            autoFocus
-                            className="w-full pl-12 pr-4 py-2.5 text-base sm:text-lg font-bold font-mono bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[var(--primary-brand)] focus:ring-3 focus:ring-[var(--primary-brand)]/15 transition-all"
-                          />
-                        </div>
-
-                        {/* Botones de atajo rápido */}
-                        <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-0.5">
-                          <button
-                            type="button"
-                            onClick={() => setMontoRecibido(total.toFixed(2))}
-                            className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors shrink-0 cursor-pointer shadow-2xs"
-                          >
-                            Monto Exacto
-                          </button>
-                          {[100, 200, 500, 1000].map((billete) => {
-                            if (billete >= total) {
-                              return (
-                                <button
-                                  key={billete}
-                                  type="button"
-                                  onClick={() => setMontoRecibido(billete.toFixed(2))}
-                                  className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors shrink-0 cursor-pointer"
-                                >
-                                  {moneda || "C$"} {billete}
-                                </button>
-                              );
-                            }
-                            return null;
-                          })}
-                        </div>
+                  {/* Panel de Pago en Efectivo */}
+                  <div className="space-y-3 pt-1">
+                    {/* Input Monto Recibido */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Monto Recibido del Cliente
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 select-none">
+                          {moneda || "C$"}
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          value={montoRecibido}
+                          onChange={(e) => setMontoRecibido(e.target.value)}
+                          disabled={isSubmitting}
+                          autoFocus
+                          className="w-full pl-12 pr-4 py-2.5 text-base sm:text-lg font-bold font-mono bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[var(--primary-brand)] focus:ring-3 focus:ring-[var(--primary-brand)]/15 transition-all"
+                        />
                       </div>
 
-                      {/* Caja de Cálculo de Cambio en Tiempo Real */}
-                      {esMontoSuficiente ? (
-                        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/90 flex items-center justify-between animate-in fade-in duration-150 shadow-2xs">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                              <Check className="w-4 h-4 stroke-[3]" />
-                            </div>
-                            <div>
-                              <span className="text-[11px] font-bold text-emerald-900 block">
-                                Cambio a Entregar
-                              </span>
-                              <span className="text-[10px] text-emerald-700">
-                                {cambio === 0
-                                  ? "Pago exacto (sin vuelto)"
-                                  : "Devolver al cliente"}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-xl sm:text-2xl font-extrabold font-sans text-emerald-700 tracking-tight">
-                            {formatMoney(cambio)}
-                          </div>
-                        </div>
-                      ) : montoRecibido.trim() !== "" ? (
-                        <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between text-xs text-rose-800 animate-in fade-in duration-150">
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                            <span className="font-bold">Monto insuficiente</span>
-                          </div>
-                          <span className="font-mono font-bold text-rose-700">
-                            Faltan {formatMoney(faltante)}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs text-slate-500 text-center">
-                          Ingresa el monto recibido para calcular el cambio.
-                        </div>
-                      )}
+                      {/* Botones de atajo rápido */}
+                      <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setMontoRecibido(total.toFixed(2))}
+                          className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors shrink-0 cursor-pointer shadow-2xs"
+                        >
+                          Monto Exacto
+                        </button>
+                        {[100, 200, 500, 1000].map((billete) => {
+                          if (billete >= total) {
+                            return (
+                              <button
+                                key={billete}
+                                type="button"
+                                onClick={() => setMontoRecibido(billete.toFixed(2))}
+                                className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors shrink-0 cursor-pointer"
+                              >
+                                {moneda || "C$"} {billete}
+                              </button>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
                     </div>
-                  ) : (
-                    /* Panel de Pago con Tarjeta */
-                    <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200/80 text-blue-950 space-y-2 animate-in fade-in duration-150">
-                      <div className="flex items-center gap-2.5">
-                        <CreditCard className="w-5 h-5 text-blue-600 shrink-0" />
-                        <div>
-                          <p className="font-bold text-xs sm:text-sm text-blue-900">
-                            Terminal de Tarjeta
-                          </p>
-                          <p className="text-[11px] text-blue-800/90 mt-0.5">
-                            Procesa la transacción en el terminal bancario físico por{" "}
-                            <strong>{formatMoney(total)}</strong>.
-                          </p>
+
+                    {/* Caja de Cálculo de Cambio en Tiempo Real */}
+                    {esMontoSuficiente ? (
+                      <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/90 flex items-center justify-between animate-in fade-in duration-150 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                            <Check className="w-4 h-4 stroke-[3]" />
+                          </div>
+                          <div>
+                            <span className="text-[11px] font-bold text-emerald-900 block">
+                              Cambio a Entregar
+                            </span>
+                            <span className="text-[10px] text-emerald-700">
+                              {cambio === 0
+                                ? "Pago exacto (sin vuelto)"
+                                : "Devolver al cliente"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-extrabold font-sans text-emerald-700 tracking-tight">
+                          {formatMoney(cambio)}
                         </div>
                       </div>
-                      <p className="text-[10px] text-blue-700 pt-1 border-t border-blue-200/60">
-                        * No aplica cálculo de cambio en efectivo.
-                      </p>
-                    </div>
-                  )}
+                    ) : montoRecibido.trim() !== "" ? (
+                      <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between text-xs text-rose-800 animate-in fade-in duration-150">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span className="font-bold">Monto insuficiente</span>
+                        </div>
+                        <span className="font-mono font-bold text-rose-700">
+                          Faltan {formatMoney(faltante)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs text-slate-500 text-center">
+                        Ingresa el monto recibido para calcular el cambio.
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Footer del Modal */}
@@ -1766,10 +1973,7 @@ export default function NuevaVentaPOSPage() {
                     size="sm"
                     onClick={handleConfirmarVenta}
                     isLoading={isSubmitting}
-                    disabled={
-                      isSubmitting ||
-                      (metodoPago === "efectivo" && !esMontoSuficiente)
-                    }
+                    disabled={isSubmitting || !esMontoSuficiente}
                     className="text-xs font-bold gap-1.5 shadow-sm"
                   >
                     {isSubmitting ? (

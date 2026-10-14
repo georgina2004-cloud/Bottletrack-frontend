@@ -5,8 +5,10 @@ import Link from "next/link";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { ProtectedByRole } from "@/components/auth/ProtectedByRole";
 import { useAuth } from "@/context/AuthContext";
-import { obtenerAuditLogs } from "@/lib/api";
+import { obtenerAuditLogs, obtenerVentaPorId } from "@/lib/api";
 import { AuditLog, AuditLogsPaginadosResponse } from "@/types/auditoria";
+import { Venta } from "@/types/venta";
+import { formatDateTimeLegible, formatDateLegible } from "@/lib/formatDate";
 import { Button } from "@/components/ui/Button";
 import { DetailDrawer } from "@/components/ui/DetailDrawer";
 import {
@@ -26,6 +28,15 @@ import {
   FileCode,
   CheckCircle2,
   AlertCircle,
+  RotateCcw,
+  Receipt,
+  Package,
+  DollarSign,
+  Tag,
+  ShieldAlert,
+  SlidersHorizontal,
+  Image as ImageIcon,
+  ExternalLink,
 } from "lucide-react";
 
 /**
@@ -56,6 +67,77 @@ function getModuloLegible(auditableType: string): string {
 }
 
 /**
+ * Diccionario de traducción de nombres de campos técnicos a etiquetas amigables en español.
+ */
+const FIELD_LABELS: Record<string, string> = {
+  nombre: "Nombre",
+  name: "Nombre",
+  numero_factura: "N° Factura / Ticket",
+  cliente_nombre: "Nombre del Cliente",
+  fecha: "Fecha",
+  subtotal: "Subtotal",
+  descuento: "Descuento",
+  impuesto: "Impuesto (IVA 15%)",
+  total: "Total Facturado",
+  estado_activa: "Estado de la Venta",
+  activo: "Estado Activo",
+  stock_actual: "Stock Actual",
+  stock_minimo: "Stock Mínimo",
+  stock: "Stock",
+  precio_compra: "Precio de Compra",
+  precio_venta: "Precio de Venta",
+  codigo_barras: "Código de Barras",
+  descripcion: "Descripción",
+  razon_social: "Razón Social",
+  nombre_comercial: "Nombre Comercial",
+  ruc: "RUC",
+  telefono: "Teléfono",
+  email: "Correo Electrónico",
+  correo: "Correo Electrónico",
+  direccion: "Dirección",
+  ubicacion: "Ubicación en Bodega",
+  categoria: "Categoría",
+  categoria_id: "ID Categoría",
+  proveedor: "Proveedor",
+  marca: "Marca",
+  proveedor_id: "ID Proveedor",
+  presentacion_ml: "Presentación (ML)",
+  unidades_equivalentes: "Unidades Equivalentes",
+  motivo: "Motivo de Anulación",
+  eslogan: "Eslogan",
+  logo_path: "Logo de la Empresa",
+  imagen_path: "Imagen del Producto",
+  stock_maximo: "Stock Máximo",
+  fecha_vencimiento: "Fecha de Vencimiento",
+  ubicacion_en_bodega: "Ubicación en Bodega",
+};
+
+/**
+ * Obtiene una etiqueta en español amigable para cualquier campo de la base de datos.
+ */
+function getFieldLabel(campo: string): string {
+  const norm = (campo || "").toLowerCase().trim();
+  if (FIELD_LABELS[norm]) return FIELD_LABELS[norm];
+  if (FIELD_LABELS[campo]) return FIELD_LABELS[campo];
+  const clean = campo.replace(/_/g, " ").trim();
+  return clean.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Campos técnicos irrelevantes para la vista ejecutiva/resumen de creación.
+ */
+const CAMPOS_TECNICOS_IGNORADOS = new Set([
+  "id",
+  "created_at",
+  "updated_at",
+  "deleted_at",
+  "user_id",
+  "remember_token",
+  "password",
+  "email_verified_at",
+]);
+
+/**
  * Genera el badge de acción (creación, actualización, eliminación, anulación).
  */
 function getActionBadge(action: string) {
@@ -70,11 +152,20 @@ function getActionBadge(action: string) {
     );
   }
 
-  if (norm.includes("act") || norm === "update" || norm === "edit") {
+  if (norm.includes("anul")) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+        Anulación
+      </span>
+    );
+  }
+
+  if (norm.includes("act") || norm === "update" || norm === "edit" || norm === "modific") {
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
         <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-        Actualización
+        Modificación
       </span>
     );
   }
@@ -84,15 +175,6 @@ function getActionBadge(action: string) {
       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
         <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
         Eliminación
-      </span>
-    );
-  }
-
-  if (norm.includes("anul")) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-        Anulación
       </span>
     );
   }
@@ -130,6 +212,9 @@ function formatFechaAuditoria(fechaIso: string): { fecha: string; hora: string }
   }
 }
 
+/**
+ * Parse seguro de valores raw provenientes del backend
+ */
 function parseValoresAuditoria(val: unknown): Record<string, unknown> {
   if (!val) return {};
   if (typeof val === "object" && val !== null) {
@@ -156,19 +241,171 @@ function parseValoresAuditoria(val: unknown): Record<string, unknown> {
 }
 
 /**
- * Convierte un valor a texto legible para el drawer de comparación.
+ * Renderizado amigable con formato de moneda, fecha, enteros limpios o badges booleanos.
  */
-function renderValorDiff(val: unknown): string {
-  if (val === null || val === undefined) return "—";
-  if (typeof val === "boolean") return val ? "true" : "false";
-  if (typeof val === "object") {
-    try {
-      return JSON.stringify(val, null, 2);
-    } catch {
-      return String(val);
+function renderValorAmigable(val: unknown, campo?: string): React.ReactNode {
+  if (val === null || val === undefined || val === "") {
+    return <span className="text-slate-400 italic font-normal text-xs">—</span>;
+  }
+
+  // Booleans / Estados
+  if (typeof val === "boolean" || val === 1 || val === 0 || val === "1" || val === "0") {
+    if (campo && /estado_activa/i.test(campo)) {
+      const isActiva = val === true || val === 1 || val === "1";
+      return isActiva ? (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          Activa
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+          Anulada
+        </span>
+      );
+    }
+    if (campo && /activo/i.test(campo)) {
+      const isActivo = val === true || val === 1 || val === "1";
+      return isActivo ? (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          Activo
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+          Inactivo
+        </span>
+      );
+    }
+    if (typeof val === "boolean") {
+      return (
+        <span className="font-semibold text-xs text-slate-800">
+          {val ? "Sí" : "No"}
+        </span>
+      );
     }
   }
-  return String(val);
+
+  // Montos monetarios en córdobas (C$)
+  if (
+    campo &&
+    /precio|total|subtotal|descuento|impuesto|costo/i.test(campo) &&
+    !isNaN(Number(val))
+  ) {
+    return (
+      <span className="font-sans font-bold text-slate-900 text-xs">
+        C$ {Number(val).toFixed(2)}
+      </span>
+    );
+  }
+
+  // Cantidad / Stock: enteros positivos limpios
+  if (
+    campo &&
+    /cantidad|stock|deficit|unidades/i.test(campo) &&
+    !isNaN(Number(val))
+  ) {
+    return (
+      <span className="font-mono font-bold text-slate-800 text-xs">
+        {Math.abs(Math.round(Number(val)))}
+      </span>
+    );
+  }
+
+  // Fechas legibles
+  if (campo && /fecha|created_at|updated_at/i.test(campo) && typeof val === "string") {
+    return (
+      <span className="text-slate-800 font-medium text-xs">
+        {formatDateTimeLegible(val)}
+      </span>
+    );
+  }
+
+  // Imágenes y rutas de archivos multimedia
+  if (campo && /imagen|logo|foto|image/i.test(campo) && typeof val === "string") {
+    if (!val || val.trim() === "") {
+      return <span className="text-slate-400 italic text-xs">Sin imagen</span>;
+    }
+
+    const backendBase =
+      (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, "")) ||
+      "http://localhost:8000";
+    const imageUrl = val.startsWith("http")
+      ? val
+      : `${backendBase}/storage/${val.replace(/^\/?storage\//, "")}`;
+
+    const fileName = val.split("/").pop() || val;
+
+    return (
+      <div className="flex items-center gap-3 min-w-0 max-w-full overflow-hidden py-0.5">
+        <a
+          href={imageUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group relative w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center shadow-2xs hover:border-brand/40 hover:ring-2 hover:ring-brand/20 transition-all cursor-pointer"
+          title="Ver imagen completa en pestaña nueva"
+        >
+          <img
+            src={imageUrl}
+            alt="Vista previa"
+            className="w-full h-full object-cover relative z-10 transition-transform group-hover:scale-105"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = "none";
+            }}
+          />
+          <ImageIcon className="w-4 h-4 text-slate-400 absolute" />
+        </a>
+        <div className="min-w-0 flex-1 overflow-hidden space-y-0.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className="font-mono text-xs font-semibold text-slate-800 truncate"
+              title={fileName}
+            >
+              {fileName}
+            </span>
+            <a
+              href={imageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-400 hover:text-brand shrink-0 inline-flex items-center"
+              title="Abrir imagen completa"
+            >
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+          <span
+            className="text-[10px] text-slate-400 block truncate font-mono"
+            title={val}
+          >
+            {val}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Objetos y listas
+  if (typeof val === "object") {
+    try {
+      return (
+        <pre className="font-mono text-[11px] text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100 overflow-x-auto whitespace-pre-wrap break-all max-w-full">
+          {JSON.stringify(val, null, 2)}
+        </pre>
+      );
+    } catch {
+      return <span className="text-xs text-slate-800 break-all">{String(val)}</span>;
+    }
+  }
+
+  return (
+    <span
+      className="text-xs text-slate-800 font-medium break-all max-w-full block"
+      title={String(val)}
+    >
+      {String(val)}
+    </span>
+  );
 }
 
 export default function AuditoriaPage() {
@@ -186,11 +423,13 @@ export default function AuditoriaPage() {
   // Filtros
   const [usuarioIdInput, setUsuarioIdInput] = useState<string>("");
   const [moduloFiltro, setModuloFiltro] = useState<string>("");
+  const [accionFiltro, setAccionFiltro] = useState<string>("");
   const [desde, setDesde] = useState<string>("");
   const [hasta, setHasta] = useState<string>("");
   const [filtroAplicado, setFiltroAplicado] = useState({
     usuario_id: "",
     modulo: "",
+    accion: "",
     desde: "",
     hasta: "",
   });
@@ -203,6 +442,8 @@ export default function AuditoriaPage() {
 
   // Drawer de detalle
   const [logSeleccionado, setLogSeleccionado] = useState<AuditLog | null>(null);
+  const [auditableVenta, setAuditableVenta] = useState<Venta | null>(null);
+  const [cargandoAuditable, setCargandoAuditable] = useState<boolean>(false);
 
   // Cargar logs al cambiar página o filtros aplicados
   const fetchLogs = useCallback(async () => {
@@ -214,6 +455,7 @@ export default function AuditoriaPage() {
           page,
           usuario_id: filtroAplicado.usuario_id || undefined,
           modulo: filtroAplicado.modulo || undefined,
+          accion: filtroAplicado.accion || undefined,
           desde: filtroAplicado.desde || undefined,
           hasta: filtroAplicado.hasta || undefined,
         },
@@ -244,12 +486,43 @@ export default function AuditoriaPage() {
     fetchLogs();
   }, [fetchLogs]);
 
+  // Cargar información enriquecida del registro auditado (especialmente para anulaciones de Venta)
+  useEffect(() => {
+    if (!logSeleccionado || !token) {
+      setAuditableVenta(null);
+      return;
+    }
+
+    const isVenta =
+      logSeleccionado.auditable_type?.includes("Venta") ||
+      (logSeleccionado.action || "").toLowerCase().includes("anul");
+
+    if (isVenta && logSeleccionado.auditable_id) {
+      // Si el log ya incluye auditable con factura, usarlo directamente
+      const aud = logSeleccionado.auditable as any;
+      if (aud && aud.numero_factura) {
+        setAuditableVenta(aud as Venta);
+        return;
+      }
+
+      // Si no, cargar la venta por su ID para enriquecer la auditoría
+      setCargandoAuditable(true);
+      obtenerVentaPorId(logSeleccionado.auditable_id, token)
+        .then((v) => setAuditableVenta(v))
+        .catch(() => setAuditableVenta(null))
+        .finally(() => setCargandoAuditable(false));
+    } else {
+      setAuditableVenta(null);
+    }
+  }, [logSeleccionado, token]);
+
   const handleAplicarFiltros = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
     setFiltroAplicado({
       usuario_id: usuarioIdInput.trim(),
       modulo: moduloFiltro.trim(),
+      accion: accionFiltro.trim(),
       desde: desde.trim(),
       hasta: hasta.trim(),
     });
@@ -258,91 +531,26 @@ export default function AuditoriaPage() {
   const handleLimpiarFiltros = () => {
     setUsuarioIdInput("");
     setModuloFiltro("");
+    setAccionFiltro("");
     setDesde("");
     setHasta("");
     setPage(1);
     setFiltroAplicado({
       usuario_id: "",
       modulo: "",
+      accion: "",
       desde: "",
       hasta: "",
     });
   };
 
-  const tieneFiltrosActivos =
-    Boolean(filtroAplicado.usuario_id ||
-    filtroAplicado.modulo ||
-    filtroAplicado.desde ||
-    filtroAplicado.hasta);
-
-  // Calcular claves modificadas entre old_values y new_values
-  const getCamposCambiados = (log: AuditLog) => {
-    const oldV = parseValoresAuditoria(log.old_values);
-    const newV = parseValoresAuditoria(log.new_values);
-    const todasLasKeys = Array.from(new Set([...Object.keys(oldV), ...Object.keys(newV)]));
-
-    const actionNorm = (log.action || "").toLowerCase().trim();
-    const isCreacion = actionNorm.includes("crea") || actionNorm === "create" || actionNorm === "store";
-    const isEliminacion = actionNorm.includes("elim") || actionNorm === "delete" || actionNorm === "destroy";
-
-    // Si es creación, todos los new_values son nuevos
-    if (isCreacion || Object.keys(oldV).length === 0) {
-      if (Object.keys(newV).length > 0) {
-        return Object.keys(newV).map((k) => ({
-          campo: k,
-          antiguo: null,
-          nuevo: newV[k],
-          badge: "Nuevo Atributo",
-          badgeColor: "bg-emerald-100 text-emerald-800",
-        }));
-      }
-    }
-
-    // Si es eliminación, todos los old_values fueron removidos
-    if (isEliminacion || Object.keys(newV).length === 0) {
-      if (Object.keys(oldV).length > 0) {
-        return Object.keys(oldV).map((k) => ({
-          campo: k,
-          antiguo: oldV[k],
-          nuevo: null,
-          badge: "Eliminado",
-          badgeColor: "bg-rose-100 text-rose-800",
-        }));
-      }
-    }
-
-    // Si es actualización, filtrar solo los que cambiaron de valor
-    const modificados = todasLasKeys
-      .filter((key) => {
-        const a = JSON.stringify(oldV[key]);
-        const b = JSON.stringify(newV[key]);
-        return a !== b;
-      })
-      .map((key) => ({
-        campo: key,
-        antiguo: oldV[key] ?? null,
-        nuevo: newV[key] ?? null,
-        badge: "Modificado",
-        badgeColor: "bg-blue-100 text-blue-800",
-      }));
-
-    if (modificados.length > 0) {
-      return modificados;
-    }
-
-    // Si no hubo diferencias estrictas pero hay claves en newV u oldV, mostrarlas todas
-    if (todasLasKeys.length > 0) {
-      return todasLasKeys.map((key) => ({
-        campo: key,
-        antiguo: oldV[key] ?? null,
-        nuevo: newV[key] ?? null,
-        badge: "Registrado",
-        badgeColor: "bg-slate-100 text-slate-700",
-      }));
-    }
-
-    return [];
-  };
+  const tieneFiltrosActivos = Boolean(
+    filtroAplicado.usuario_id ||
+      filtroAplicado.modulo ||
+      filtroAplicado.accion ||
+      filtroAplicado.desde ||
+      filtroAplicado.hasta
+  );
 
   return (
     <ProtectedByRole modulo="auditoria">
@@ -360,7 +568,7 @@ export default function AuditoriaPage() {
                     Registro de Auditoría
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-                    Trazabilidad en tiempo real de operaciones, modificaciones y cambios en el sistema.
+                    Trazabilidad en tiempo real de operaciones, anulaciones y cambios en el sistema.
                   </p>
                 </div>
               </div>
@@ -386,7 +594,7 @@ export default function AuditoriaPage() {
             onSubmit={handleAplicarFiltros}
             className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3"
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {/* Filtro por Módulo */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
@@ -395,7 +603,7 @@ export default function AuditoriaPage() {
                 <select
                   value={moduloFiltro}
                   onChange={(e) => setModuloFiltro(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 cursor-pointer"
                 >
                   <option value="">Todos los módulos</option>
                   <option value="Producto">Productos</option>
@@ -410,25 +618,42 @@ export default function AuditoriaPage() {
                 </select>
               </div>
 
+              {/* Filtro por Acción */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Acción
+                </label>
+                <select
+                  value={accionFiltro}
+                  onChange={(e) => setAccionFiltro(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 cursor-pointer"
+                >
+                  <option value="">Todas las acciones</option>
+                  <option value="anular">Anulación</option>
+                  <option value="create">Creación</option>
+                  <option value="update">Modificación</option>
+                  <option value="delete">Eliminación</option>
+                </select>
+              </div>
+
               {/* Filtro por Usuario ID */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                   ID de Usuario
                 </label>
                 <div className="relative">
-                  <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="number"
-                    min="1"
                     placeholder="Ej. 1"
                     value={usuarioIdInput}
                     onChange={(e) => setUsuarioIdInput(e.target.value)}
-                    className="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+                    className="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
                   />
+                  <User className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 </div>
               </div>
 
-              {/* Fecha Desde */}
+              {/* Rango: Desde */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Desde
@@ -437,11 +662,11 @@ export default function AuditoriaPage() {
                   type="date"
                   value={desde}
                   onChange={(e) => setDesde(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 font-sans"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 cursor-pointer"
                 />
               </div>
 
-              {/* Fecha Hasta */}
+              {/* Rango: Hasta */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Hasta
@@ -450,68 +675,51 @@ export default function AuditoriaPage() {
                   type="date"
                   value={hasta}
                   onChange={(e) => setHasta(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 font-sans"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 cursor-pointer"
                 />
               </div>
             </div>
 
-            {/* Botones de acción del filtro */}
-            <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-              <div className="text-xs text-slate-500">
-                {tieneFiltrosActivos && (
-                  <span className="font-semibold text-brand">
-                    Filtros activos aplicados
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                {tieneFiltrosActivos && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleLimpiarFiltros}
-                    className="text-xs text-slate-500 hover:text-slate-800"
-                  >
-                    <X className="w-3.5 h-3.5 mr-1" />
-                    <span>Limpiar</span>
-                  </Button>
-                )}
-
+            {/* Botones de Filtro */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              {tieneFiltrosActivos && (
                 <Button
-                  type="submit"
+                  type="button"
+                  variant="outline"
                   size="sm"
-                  className="text-xs font-semibold gap-1.5 shadow-sm shadow-brand/20"
+                  onClick={handleLimpiarFiltros}
+                  className="text-xs h-8 px-3"
                 >
-                  <Filter className="w-3.5 h-3.5" />
-                  <span>Filtrar</span>
+                  <X className="w-3 h-3 mr-1" />
+                  Limpiar Filtros
                 </Button>
-              </div>
+              )}
+              <Button
+                type="submit"
+                size="sm"
+                className="text-xs h-8 px-4 font-semibold gap-1.5 shadow-sm shadow-brand/20 cursor-pointer"
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span>Aplicar Filtros</span>
+              </Button>
             </div>
           </form>
 
-          {/* Mensaje de Error */}
+          {/* Mensaje de Error si aplica */}
           {errorMessage && (
-            <div
-              role="alert"
-              className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-start gap-3 shadow-2xs"
-            >
-              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-bold text-rose-900">Error al consultar auditoría</p>
-                <p className="mt-0.5 text-rose-700">{errorMessage}</p>
-              </div>
+            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* Tabla de Registros */}
+          {/* Tabla de Logs */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200/80 bg-slate-50/70 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    <th className="py-3.5 px-4">Usuario</th>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3.5 px-4">Usuario Responsable</th>
                     <th className="py-3.5 px-4">Acción</th>
                     <th className="py-3.5 px-4">Módulo Afectado</th>
                     <th className="py-3.5 px-4">ID Registro</th>
@@ -661,140 +869,435 @@ export default function AuditoriaPage() {
           </div>
 
           {/* ========================================================================= */}
-          {/* DETAIL DRAWER: COMPARATIVA OLD_VALUES VS NEW_VALUES LADO A LADO            */}
+          {/* DETAIL DRAWER: REDISEÑO PROFESIONAL DIFERENCIADO POR TIPO DE ACCIÓN       */}
           {/* ========================================================================= */}
-          {logSeleccionado && (
-            <DetailDrawer
-              isOpen={Boolean(logSeleccionado)}
-              onClose={() => setLogSeleccionado(null)}
-              title={`Auditoría #${logSeleccionado.id}: ${getModuloLegible(logSeleccionado.auditable_type)}`}
-              subtitle={`Acción ejecutada por ${logSeleccionado.usuario?.name || "Sistema"} • ID #${logSeleccionado.auditable_id}`}
-            >
-              <div className="p-5 space-y-6">
-                {/* Metadatos Generales */}
-                <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs">
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                      Acción
-                    </span>
-                    <div>{getActionBadge(logSeleccionado.action)}</div>
-                  </div>
+          {logSeleccionado && (() => {
+            const oldV = parseValoresAuditoria(logSeleccionado.old_values);
+            const newV = parseValoresAuditoria(logSeleccionado.new_values);
+            const actionNorm = (logSeleccionado.action || "").toLowerCase().trim();
 
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                      Fecha y Hora
-                    </span>
-                    <div className="font-semibold text-slate-800">
-                      {formatFechaAuditoria(logSeleccionado.created_at).fecha} {formatFechaAuditoria(logSeleccionado.created_at).hora}
+            // Detección precisa de Anulaciones
+            const isAnulacion =
+              actionNorm.includes("anul") ||
+              newV.estado_activa === false ||
+              newV.estado_activa === 0 ||
+              (oldV.estado_activa === true && newV.estado_activa === false);
+
+            // Detección de Creación
+            const isCreacion =
+              !isAnulacion &&
+              (actionNorm.includes("crea") ||
+                actionNorm === "create" ||
+                actionNorm === "store" ||
+                (Object.keys(oldV).length === 0 && Object.keys(newV).length > 0));
+
+            // Detección de Eliminación
+            const isEliminacion =
+              !isAnulacion &&
+              (actionNorm.includes("elim") ||
+                actionNorm === "delete" ||
+                actionNorm === "destroy");
+
+            // Modificación regular
+            const isModificacion = !isAnulacion && !isCreacion && !isEliminacion;
+
+            // Datos descriptivos enriquecidos para Ventas o Anulaciones
+            const numeroFactura: string =
+              (oldV.numero_factura as string) ||
+              (newV.numero_factura as string) ||
+              (auditableVenta?.numero_factura as string) ||
+              ((logSeleccionado.auditable as any)?.numero_factura as string) ||
+              "";
+
+            const nombreCliente: string =
+              (oldV.cliente_nombre as string) ||
+              (newV.cliente_nombre as string) ||
+              (auditableVenta?.cliente_nombre as string) ||
+              ((logSeleccionado.auditable as any)?.cliente_nombre as string) ||
+              "";
+
+            const totalVenta: number | string | null =
+              (oldV.total as any) ??
+              (newV.total as any) ??
+              (auditableVenta?.total as any) ??
+              ((logSeleccionado.auditable as any)?.total as any) ??
+              null;
+
+            const fechaVenta: string =
+              (oldV.fecha as string) ||
+              (newV.fecha as string) ||
+              (auditableVenta?.fecha as string) ||
+              ((logSeleccionado.auditable as any)?.fecha as string) ||
+              "";
+
+            // Productos restituidos en la anulación
+            const productosRestituidos =
+              (oldV.productos_restituidos as any[]) ||
+              (newV.productos_restituidos as any[]) ||
+              (auditableVenta?.detalles as any[]) ||
+              [];
+
+            // Campos modificados para comparativa Old vs New (excluyendo updated_at y valores idénticos)
+            const camposModificados = Array.from(
+              new Set([...Object.keys(oldV), ...Object.keys(newV)])
+            )
+              .filter((k) => k !== "updated_at")
+              .filter((k) => JSON.stringify(oldV[k]) !== JSON.stringify(newV[k]))
+              .map((k) => ({
+                campo: k,
+                etiqueta: getFieldLabel(k),
+                antiguo: oldV[k] ?? null,
+                nuevo: newV[k] ?? null,
+              }));
+
+            // Campos limpios para la ficha de creación (filtrando llaves técnicas)
+            const camposCreacion = Object.keys(newV)
+              .filter((k) => !CAMPOS_TECNICOS_IGNORADOS.has(k))
+              .map((k) => ({
+                campo: k,
+                etiqueta: getFieldLabel(k),
+                valor: newV[k],
+              }));
+
+            const moduloNombre = getModuloLegible(logSeleccionado.auditable_type);
+
+            return (
+              <DetailDrawer
+                isOpen={Boolean(logSeleccionado)}
+                onClose={() => setLogSeleccionado(null)}
+                title={
+                  isAnulacion
+                    ? `Auditoría: Anulación de ${moduloNombre}`
+                    : isCreacion
+                    ? `Auditoría: Creación de ${moduloNombre}`
+                    : isEliminacion
+                    ? `Auditoría: Eliminación de ${moduloNombre}`
+                    : `Auditoría: Modificación de ${moduloNombre}`
+                }
+                subtitle={`${
+                  numeroFactura
+                    ? `Factura ${numeroFactura} • `
+                    : `ID #${logSeleccionado.auditable_id} • `
+                }Ejecutado por ${logSeleccionado.usuario?.name || "Sistema"}`}
+              >
+                <div className="p-5 space-y-6">
+                  {/* ============================================================== */}
+                  {/* METADATOS GENERALES DEL EVENTO                                 */}
+                  {/* ============================================================== */}
+                  <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                        Acción Ejecutada
+                      </span>
+                      <div>{getActionBadge(logSeleccionado.action)}</div>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                        Fecha y Hora
+                      </span>
+                      <div className="font-semibold text-slate-800">
+                        {formatFechaAuditoria(logSeleccionado.created_at).fecha}{" "}
+                        <span className="text-[11px] font-mono text-slate-500">
+                          {formatFechaAuditoria(logSeleccionado.created_at).hora}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                        Usuario Responsable
+                      </span>
+                      <div className="font-bold text-slate-900">
+                        {logSeleccionado.usuario?.name || "Sistema"}
+                      </div>
+                      {logSeleccionado.usuario?.email && (
+                        <span className="text-[10px] text-slate-400">
+                          {logSeleccionado.usuario.email}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                        Dirección IP
+                      </span>
+                      <div className="font-mono text-slate-700">
+                        {logSeleccionado.ip_address || "127.0.0.1"}
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                      Usuario Responsable
-                    </span>
-                    <div className="font-bold text-slate-900">
-                      {logSeleccionado.usuario?.name || "Sistema"}
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                      Dirección IP
-                    </span>
-                    <div className="font-mono text-slate-700">
-                      {logSeleccionado.ip_address || "127.0.0.1"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Comparativa Lado a Lado de Campos Modificados */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                      <FileCode className="w-4 h-4 text-brand" />
-                      <span>Campos Modificados (Old vs New)</span>
-                    </h3>
-                    <span className="text-[11px] font-semibold text-slate-400">
-                      {getCamposCambiados(logSeleccionado).length} atributo(s)
-                    </span>
-                  </div>
-
-                  {getCamposCambiados(logSeleccionado).length === 0 ? (
-                    <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs space-y-2">
-                      <p className="font-semibold">No se detectaron cambios en campos individuales.</p>
-                      <p className="text-[11px] text-slate-400">
-                        {logSeleccionado.action} sobre {getModuloLegible(logSeleccionado.auditable_type)} #{logSeleccionado.auditable_id}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {getCamposCambiados(logSeleccionado).map(({ campo, antiguo, nuevo, badge, badgeColor }) => (
-                        <div
-                          key={campo}
-                          className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-2xs"
-                        >
-                          {/* Nombre del Campo */}
-                          <div className="bg-slate-100/80 px-3.5 py-1.5 border-b border-slate-200 flex items-center justify-between">
-                            <span className="font-mono font-bold text-xs text-slate-800">
-                              {campo}
-                            </span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeColor || "bg-slate-100 text-slate-700"}`}>
-                              {badge || "Modificado"}
-                            </span>
+                  {/* ============================================================== */}
+                  {/* CASO 1: ANULACIÓN (VENTAS O REGISTROS CANCELADOS)             */}
+                  {/* ============================================================== */}
+                  {isAnulacion && (
+                    <div className="space-y-4">
+                      {/* Tarjeta de Advertencia y Datos Clave de la Venta */}
+                      <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-amber-950 text-xs space-y-3.5 shadow-2xs">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                            <RotateCcw className="w-4 h-4 text-amber-600" />
                           </div>
-
-                          {/* Comparativa 2 Columnas */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 text-xs">
-                            {/* Valor Antiguo */}
-                            <div className="p-3 bg-rose-50/30">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block mb-1">
-                                Valor Anterior
-                              </span>
-                              <pre className="font-mono text-xs text-rose-900 bg-rose-50/70 p-2 rounded-lg overflow-x-auto whitespace-pre-wrap break-all border border-rose-100 font-medium">
-                                {renderValorDiff(antiguo)}
-                              </pre>
-                            </div>
-
-                            {/* Valor Nuevo */}
-                            <div className="p-3 bg-emerald-50/30">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block mb-1">
-                                Valor Nuevo
-                              </span>
-                              <pre className="font-mono text-xs text-emerald-900 bg-emerald-50/70 p-2 rounded-lg overflow-x-auto whitespace-pre-wrap break-all border border-emerald-100 font-medium">
-                                {renderValorDiff(nuevo)}
-                              </pre>
-                            </div>
+                          <div>
+                            <p className="font-bold text-sm text-amber-900">
+                              Registro de Anulación Confirmado
+                            </p>
+                            <p className="text-[11px] text-amber-800 mt-0.5">
+                              Esta operación anuló el registro y restituyó las existencias correspondientes al inventario.
+                            </p>
                           </div>
                         </div>
-                      ))}
+
+                        {/* Bloque descriptivo destacado de la venta */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-amber-200/70 text-xs">
+                          {/* N° Factura / Ticket */}
+                          <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200/60 shadow-2xs">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800/70 block">
+                              N° Factura / Ticket
+                            </span>
+                            <span className="font-mono font-bold text-slate-900 mt-0.5 block truncate">
+                              {numeroFactura || `Venta #${logSeleccionado.auditable_id}`}
+                            </span>
+                          </div>
+
+                          {/* Cliente */}
+                          <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200/60 shadow-2xs">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800/70 block">
+                              Cliente
+                            </span>
+                            <span className="font-bold text-slate-900 mt-0.5 block truncate">
+                              {nombreCliente || "Consumidor final"}
+                            </span>
+                          </div>
+
+                          {/* Total Anulado */}
+                          <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200/60 shadow-2xs">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800/70 block">
+                              Total Anulado
+                            </span>
+                            <span className="font-sans font-bold text-rose-700 mt-0.5 block">
+                              {totalVenta ? `C$ ${Number(totalVenta).toFixed(2)}` : "—"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Motivo de Anulación si fue registrado */}
+                        {Boolean(newV.motivo || oldV.motivo) && (
+                          <div className="p-2.5 rounded-xl bg-amber-100/60 border border-amber-200 text-amber-900 text-[11px]">
+                            <span className="font-bold">Motivo: </span>
+                            <span>{String(newV.motivo || oldV.motivo)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Lista de Existencias / Productos Restituidos */}
+                      {productosRestituidos.length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <Package className="w-3.5 h-3.5 text-brand" />
+                            <span>Productos Restituidos al Inventario</span>
+                          </h4>
+                          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                            <table className="w-full text-left text-xs">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] font-bold uppercase">
+                                  <th className="py-2 px-3">Producto</th>
+                                  <th className="py-2 px-3 text-center">Cant. Restituida</th>
+                                  <th className="py-2 px-3 text-right">Subtotal</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {productosRestituidos.map((prod: any, idx: number) => {
+                                  const prodNombre =
+                                    prod.producto?.nombre ||
+                                    prod.producto_nombre ||
+                                    prod.producto ||
+                                    `Producto #${prod.producto_id || idx + 1}`;
+                                  const cant = Math.abs(Math.round(Number(prod.cantidad || 0)));
+                                  const sub = Number(prod.subtotal || prod.total || 0);
+
+                                  return (
+                                    <tr key={idx} className="hover:bg-slate-50/50">
+                                      <td className="py-2 px-3 font-semibold text-slate-800">
+                                        {prodNombre}
+                                      </td>
+                                      <td className="py-2 px-3 text-center font-mono font-bold text-emerald-700">
+                                        +{cant}
+                                      </td>
+                                      <td className="py-2 px-3 text-right font-sans font-bold text-slate-900">
+                                        C$ {sub.toFixed(2)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Detalle Raw JSON inspeccionable */}
-                  <details className="mt-4 pt-2 border-t border-slate-100 group">
-                    <summary className="text-[11px] font-bold uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-800 select-none py-1">
-                      + Ver estructura JSON completa
+                  {/* ============================================================== */}
+                  {/* CASO 2: CREACIÓN (FICHA LIMPIA DE RESUMEN SIN OLD VS NEW)       */}
+                  {/* ============================================================== */}
+                  {isCreacion && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Datos del Registro Creado</span>
+                        </h3>
+                        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          Nuevo Registro
+                        </span>
+                      </div>
+
+                      {camposCreacion.length === 0 ? (
+                        <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs">
+                          <p className="font-semibold">Registro creado sin atributos individuales adicionales.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {camposCreacion.map(({ campo, etiqueta, valor }) => (
+                            <div
+                              key={campo}
+                              className={`p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between min-w-0 overflow-hidden ${
+                                /imagen|logo|foto|image/i.test(campo) ? "sm:col-span-2" : ""
+                              }`}
+                            >
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1 truncate">
+                                {etiqueta}
+                              </span>
+                              <div className="min-w-0 max-w-full overflow-hidden">
+                                {renderValorAmigable(valor, campo)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ============================================================== */}
+                  {/* CASO 3: MODIFICACIÓN (OLD VS NEW DE CAMPOS CAMBIADOS)          */}
+                  {/* ============================================================== */}
+                  {isModificacion && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                          <SlidersHorizontal className="w-4 h-4 text-brand" />
+                          <span>Campos Modificados</span>
+                        </h3>
+                        <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                          {camposModificados.length} cambio(s)
+                        </span>
+                      </div>
+
+                      {camposModificados.length === 0 ? (
+                        <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs space-y-1">
+                          <p className="font-semibold text-slate-700">
+                            No se detectaron cambios en campos de datos.
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            Operación registrada sobre {moduloNombre} #{logSeleccionado.auditable_id}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {camposModificados.map(({ campo, etiqueta, antiguo, nuevo }) => (
+                            <div
+                              key={campo}
+                              className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-2xs"
+                            >
+                              {/* Encabezado del Campo Modificado */}
+                              <div className="bg-slate-50 px-3.5 py-1.5 border-b border-slate-100 flex items-center justify-between">
+                                <span className="font-bold text-xs text-slate-800">
+                                  {etiqueta}
+                                </span>
+                                <span className="font-mono text-[10px] text-slate-400">
+                                  {campo}
+                                </span>
+                              </div>
+
+                              {/* Comparativa 2 Columnas: Anterior vs Nuevo */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 text-xs">
+                                {/* Valor Anterior */}
+                                <div className="p-3 bg-rose-50/20 min-w-0 overflow-hidden">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block mb-1 truncate">
+                                    Valor Anterior
+                                  </span>
+                                  <div className="p-2 rounded-lg bg-rose-50/60 border border-rose-100 min-h-[36px] flex items-center min-w-0 max-w-full overflow-hidden">
+                                    {renderValorAmigable(antiguo, campo)}
+                                  </div>
+                                </div>
+
+                                {/* Valor Nuevo */}
+                                <div className="p-3 bg-emerald-50/20 min-w-0 overflow-hidden">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block mb-1 truncate">
+                                    Valor Nuevo
+                                  </span>
+                                  <div className="p-2 rounded-lg bg-emerald-50/60 border border-emerald-100 min-h-[36px] flex items-center min-w-0 max-w-full overflow-hidden">
+                                    {renderValorAmigable(nuevo, campo)}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ============================================================== */}
+                  {/* CASO 4: ELIMINACIÓN                                            */}
+                  {/* ============================================================== */}
+                  {isEliminacion && (
+                    <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-950 text-xs space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-rose-800">
+                        <AlertCircle className="w-4 h-4 text-rose-600" />
+                        <span>Registro Eliminado</span>
+                      </div>
+                      <p className="text-[11px] text-rose-700">
+                        El elemento {moduloNombre} #{logSeleccionado.auditable_id} fue dado de baja o removido del sistema.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* ============================================================== */}
+                  {/* DETALLE RAW JSON COLAPSABLE                                     */}
+                  {/* ============================================================== */}
+                  <details className="mt-4 pt-3 border-t border-slate-100 group">
+                    <summary className="text-[11px] font-bold uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-800 select-none py-1 flex items-center justify-between">
+                      <span>+ Ver estructura JSON completa</span>
+                      <span className="text-[10px] font-normal text-slate-400 group-open:hidden">
+                        (Valores crudos de auditoría)
+                      </span>
                     </summary>
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
-                        <span className="text-[10px] font-bold text-slate-400 block mb-1">old_values (raw)</span>
+                        <span className="text-[10px] font-bold text-slate-400 block mb-1">
+                          old_values (raw)
+                        </span>
                         <pre className="p-2.5 rounded-xl bg-slate-900 text-slate-200 text-[11px] font-mono overflow-x-auto max-h-48 whitespace-pre-wrap break-all">
-                          {JSON.stringify(parseValoresAuditoria(logSeleccionado.old_values), null, 2)}
+                          {JSON.stringify(oldV, null, 2)}
                         </pre>
                       </div>
                       <div>
-                        <span className="text-[10px] font-bold text-slate-400 block mb-1">new_values (raw)</span>
+                        <span className="text-[10px] font-bold text-slate-400 block mb-1">
+                          new_values (raw)
+                        </span>
                         <pre className="p-2.5 rounded-xl bg-slate-900 text-slate-200 text-[11px] font-mono overflow-x-auto max-h-48 whitespace-pre-wrap break-all">
-                          {JSON.stringify(parseValoresAuditoria(logSeleccionado.new_values), null, 2)}
+                          {JSON.stringify(newV, null, 2)}
                         </pre>
                       </div>
                     </div>
                   </details>
                 </div>
-              </div>
-            </DetailDrawer>
-          )}
+              </DetailDrawer>
+            );
+          })()}
         </div>
       </DashboardLayout>
     </ProtectedByRole>
