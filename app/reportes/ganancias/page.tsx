@@ -177,7 +177,7 @@ export default function GananciasPage() {
           onFiltrar={cargarDatos}
           onLimpiar={handleLimpiarFiltros}
           isLoading={isLoading}
-          botonTexto="Generar reporte"
+          mostrarBoton={false}
           disabled={Boolean(errorFechas)}
         >
           {/* Selector de Agrupación: Día o Mes */}
@@ -250,7 +250,7 @@ export default function GananciasPage() {
           </div>
         </div>
 
-        {/* KPI 3: Total Ganancia (Verde si es positiva, roja si es negativa) */}
+        {/* KPI 3: Total Ganancia / Pérdida (Verde si es positiva, roja si es negativa) */}
         <div
           className={`bg-white p-4 rounded-2xl border shadow-xs flex items-center justify-between ${
             totalGanancia >= 0 ? "border-emerald-200/80" : "border-rose-200/80"
@@ -258,7 +258,7 @@ export default function GananciasPage() {
         >
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Total Ganancia
+              Total Ganancia / Pérdida
             </p>
             <p
               className={`text-xl font-bold font-sans mt-1 ${
@@ -268,7 +268,7 @@ export default function GananciasPage() {
               {formatMonto(totalGanancia)}
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              {totalGanancia >= 0 ? "Margen neto positivo" : "Margen deficitario"}
+              {totalGanancia >= 0 ? "Margen neto positivo (ganancia)" : "Margen deficitario (pérdida)"}
             </p>
           </div>
           <div
@@ -293,7 +293,7 @@ export default function GananciasPage() {
           /* Estado Cargando */
           <div className="py-20 text-center text-slate-400">
             <Loader2 className="w-8 h-8 animate-spin text-brand mx-auto mb-3" />
-            <span className="text-xs font-medium">Calculando ganancias del periodo...</span>
+            <span className="text-xs font-medium">Calculando ganancias y pérdidas del periodo...</span>
           </div>
         ) : error ? (
           /* Estado Error */
@@ -332,7 +332,7 @@ export default function GananciasPage() {
                   <th className="py-3.5 px-5">Periodo</th>
                   <th className="py-3.5 px-5 text-right">Ingresos</th>
                   <th className="py-3.5 px-5 text-right">Costo</th>
-                  <th className="py-3.5 px-5 text-right">Ganancia</th>
+                  <th className="py-3.5 px-5 text-right">Ganancia / Pérdida</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

@@ -14,6 +14,7 @@ interface FiltrosFechaProps {
   isLoading?: boolean;
   botonTexto?: string;
   disabled?: boolean;
+  mostrarBoton?: boolean;
   children?: React.ReactNode;
 }
 
@@ -27,6 +28,7 @@ export function FiltrosFecha({
   isLoading = false,
   botonTexto = "Filtrar",
   disabled = false,
+  mostrarBoton = true,
   children,
 }: FiltrosFechaProps) {
   const handleSubmit = (e: React.FormEvent) => {
@@ -78,35 +80,39 @@ export function FiltrosFecha({
         {children}
       </div>
 
-      <div className="flex items-center gap-2">
-        {onLimpiar && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onLimpiar}
-            className="text-xs h-8 px-2.5 gap-1 shadow-2xs cursor-pointer text-slate-600"
-            title="Restablecer fechas"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span className="hidden sm:inline">Restablecer</span>
-          </Button>
-        )}
-
-        <Button
-          type="submit"
-          size="sm"
-          disabled={isLoading || disabled}
-          className="text-xs h-8 px-3 gap-1.5 font-semibold shadow-sm shadow-brand/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Filter className="w-3.5 h-3.5" />
+      {(onLimpiar || mostrarBoton) && (
+        <div className="flex items-center gap-2">
+          {onLimpiar && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onLimpiar}
+              className="text-xs h-8 px-2.5 gap-1 shadow-2xs cursor-pointer text-slate-600"
+              title="Restablecer fechas"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span className="hidden sm:inline">Restablecer</span>
+            </Button>
           )}
-          <span>{botonTexto}</span>
-        </Button>
-      </div>
+
+          {mostrarBoton && (
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isLoading || disabled}
+              className="text-xs h-8 px-3 gap-1.5 font-semibold shadow-sm shadow-brand/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Filter className="w-3.5 h-3.5" />
+              )}
+              <span>{botonTexto}</span>
+            </Button>
+          )}
+        </div>
+      )}
     </form>
   );
 }
