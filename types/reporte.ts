@@ -6,6 +6,8 @@ export interface ReporteFiltrosFechas {
   desde?: string;
   hasta?: string;
   vendedor_id?: string | number;
+  agrupar?: "dia" | "mes" | string;
+  [key: string]: string | number | undefined;
 }
 
 export type TipoReporte =
@@ -15,7 +17,8 @@ export type TipoReporte =
   | "ventas-por-fechas"
   | "ventas-por-vendedor"
   | "compras-por-proveedor"
-  | "movimientos-inventario";
+  | "movimientos-inventario"
+  | "ganancias";
 
 export type FormatoReporte = "pdf" | "excel";
 
@@ -145,4 +148,29 @@ export interface ReporteMovimientoInventario {
   tipo: "Entrada" | "Salida";
   cantidad: number;
   precio_unitario: number | string;
+}
+
+/**
+ * 8. Respuesta para GET /api/reportes/ganancias?desde=&hasta=&agrupar=dia|mes
+ */
+export type AgruparGanancia = "dia" | "mes";
+
+export interface ReporteGananciaItem {
+  periodo: string;
+  ingresos: number | string;
+  costo: number | string;
+  ganancia: number | string;
+}
+
+export interface ReporteGananciasResponse {
+  data: ReporteGananciaItem[];
+  total_ingresos: number | string;
+  total_costo: number | string;
+  total_ganancia: number | string;
+}
+
+export interface ReporteGananciasFiltros {
+  desde?: string;
+  hasta?: string;
+  agrupar?: AgruparGanancia;
 }

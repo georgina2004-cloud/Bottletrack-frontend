@@ -139,6 +139,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         { label: "Ventas por Vendedor", href: "/reportes/ventas-por-vendedor" },
         { label: "Compras por Proveedor", href: "/reportes/compras-por-proveedor" },
         { label: "Movimientos de Inventario", href: "/reportes/movimientos-inventario" },
+        { label: "Ganancias por Periodo", href: "/reportes/ganancias" },
       ],
     },
     { name: "Auditoría", href: "/auditoria", icon: ClipboardList, modulo: "auditoria" },

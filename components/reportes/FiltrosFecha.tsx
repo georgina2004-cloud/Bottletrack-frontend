@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/Button";
-import { Calendar, Filter, RotateCcw } from "lucide-react";
+import { Calendar, Filter, RotateCcw, Loader2 } from "lucide-react";
 
 interface FiltrosFechaProps {
   desde: string;
@@ -12,6 +12,8 @@ interface FiltrosFechaProps {
   onFiltrar: () => void;
   onLimpiar?: () => void;
   isLoading?: boolean;
+  botonTexto?: string;
+  disabled?: boolean;
   children?: React.ReactNode;
 }
 
@@ -23,11 +25,15 @@ export function FiltrosFecha({
   onFiltrar,
   onLimpiar,
   isLoading = false,
+  botonTexto = "Filtrar",
+  disabled = false,
   children,
 }: FiltrosFechaProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onFiltrar();
+    if (!disabled && !isLoading) {
+      onFiltrar();
+    }
   };
 
   return (
@@ -90,11 +96,15 @@ export function FiltrosFecha({
         <Button
           type="submit"
           size="sm"
-          disabled={isLoading}
-          className="text-xs h-8 px-3 gap-1.5 font-semibold shadow-sm shadow-brand/20 cursor-pointer"
+          disabled={isLoading || disabled}
+          className="text-xs h-8 px-3 gap-1.5 font-semibold shadow-sm shadow-brand/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Filter className="w-3.5 h-3.5" />
-          <span>Filtrar</span>
+          {isLoading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Filter className="w-3.5 h-3.5" />
+          )}
+          <span>{botonTexto}</span>
         </Button>
       </div>
     </form>

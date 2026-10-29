@@ -71,6 +71,9 @@ import {
   ReporteVentasPorVendedorResponse,
   ReporteComprasPorProveedor,
   ReporteMovimientoInventario,
+  ReporteGananciasResponse,
+  ReporteGananciaItem,
+  ReporteGananciasFiltros,
 } from "@/types/reporte";
 import {
   SetupEstadoResponse,
@@ -1774,6 +1777,21 @@ export async function descargarReporteArchivo(
   ) {
     params.append("vendedor_id", String(filtros.vendedor_id).trim());
   }
+
+  // Soporte dinámico para filtros adicionales como "agrupar"
+  Object.entries(filtros).forEach(([key, val]) => {
+    if (
+      key !== "desde" &&
+      key !== "hasta" &&
+      key !== "vendedor_id" &&
+      val !== undefined &&
+      val !== null &&
+      String(val).trim() !== ""
+    ) {
+      params.append(key, String(val).trim());
+    }
+  });
+
   params.append("formato", formato);
 
   const queryString = params.toString();
@@ -2138,6 +2156,51 @@ export async function descargarReporteMovimientosExcel(
   token?: string | null
 ): Promise<void> {
   return descargarReporteArchivo("movimientos-inventario", "excel", filtros, token);
+}
+
+/**
+ * 8. Reporte de Ganancias por Periodo (Día o Mes).
+ * Endpoint: GET /api/reportes/ganancias?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&agrupar=dia|mes
+ */
+export async function obtenerReporteGanancias(
+  filtros: ReporteGananciasFiltros = {},
+  token?: string | null
+): Promise<ReporteGananciasResponse> {
+  const params = new URLSearchParams();
+  if (filtros.desde && filtros.desde.trim() !== "") {
+    params.append("desde", filtros.desde.trim());
+  }
+  if (filtros.hasta && filtros.hasta.trim() !== "") {
+    params.append("hasta", filtros.hasta.trim());
+  }
+  if (filtros.agrupar && filtros.agrupar.trim() !== "") {
+    params.append("agrupar", filtros.agrupar.trim());
+  }
+
+  const queryString = params.toString();
+  const url = `${API_BASE_URL}/reportes/ganancias${queryString ? `?${queryString}` : ""}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: getAuthHeaders(token),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      errorData?.message ||
+        `Error al obtener reporte de ganancias por periodo (${response.status})`
+    );
+  }
+
+  const data = await response.json();
+  return {
+    data: Array.isArray(data.data) ? (data.data as ReporteGananciaItem[]) : [],
+    total_ingresos: Number(data.total_ingresos ?? 0),
+    total_costo: Number(data.total_costo ?? 0),
+    total_ganancia: Number(data.total_ganancia ?? 0),
+  };
 }
 
 /**
